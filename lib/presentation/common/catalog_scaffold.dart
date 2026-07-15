@@ -227,8 +227,9 @@ class _CategorySidebarState extends State<CategorySidebar> {
     }
 
     return SizedBox(
-      // Narrower on Android so the grid gets more columns (see GridMetrics).
-      width: GridMetrics.sidebarWidth,
+      // Narrower on Android so the grid gets more columns; narrower still in
+      // portrait (see GridMetrics).
+      width: GridMetrics.sidebarWidth(context),
       child: Scrollbar(
         child: ListView(
           // Reserve gutters on both sides so the selection highlight/glow is

@@ -33,51 +33,91 @@ class _DeviceModeScreenState extends State<DeviceModeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Must fit every screen, from a small phone (landscape height can be
+    // ~330dp) up to a huge TV: compact metrics on low screens, cards stacked
+    // vertically on narrow ones, and a scroll view as the safety net so the
+    // content can never run off-screen.
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.live_tv, size: 56, color: AppColors.accent),
-                const SizedBox(height: 16),
-                Text('Come stai guardando?', style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 8),
-                Text(
-                  'Adattiamo la navigazione al tuo dispositivo. Puoi cambiarla in qualsiasi momento dalle Impostazioni.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 40),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ModeCard(
-                        icon: Icons.tv,
-                        title: 'TV / Telecomando',
-                        subtitle: 'Firestick, Android TV e simili',
-                        suggested: _suggested == DeviceMode.tv,
-                        autofocus: true,
-                        onTap: () => _choose(DeviceMode.tv),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxHeight < 480;
+            final narrow = constraints.maxWidth < 460;
+
+            final cards = [
+              _ModeCard(
+                icon: Icons.tv,
+                title: 'TV / Telecomando',
+                subtitle: 'Firestick, Android TV e simili',
+                suggested: _suggested == DeviceMode.tv,
+                autofocus: true,
+                compact: compact,
+                onTap: () => _choose(DeviceMode.tv),
+              ),
+              _ModeCard(
+                icon: Icons.smartphone,
+                title: 'Telefono / Tablet',
+                subtitle: 'Tocco e schermo touch',
+                suggested: _suggested == DeviceMode.touch,
+                compact: compact,
+                onTap: () => _choose(DeviceMode.touch),
+              ),
+            ];
+
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                // Fill the screen so the content stays centered when it fits;
+                // when it doesn't, the scroll view takes over.
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: compact ? 12 : 24,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.live_tv,
+                              size: compact ? 40 : 56, color: AppColors.accent),
+                          SizedBox(height: compact ? 8 : 16),
+                          Text('Come stai guardando?',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.headlineMedium),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Adattiamo la navigazione al tuo dispositivo. Puoi cambiarla in qualsiasi momento dalle Impostazioni.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          SizedBox(height: compact ? 16 : 40),
+                          if (narrow)
+                            Column(
+                              children: [
+                                cards[0],
+                                const SizedBox(height: 14),
+                                cards[1],
+                              ],
+                            )
+                          else
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: cards[0]),
+                                const SizedBox(width: 20),
+                                Expanded(child: cards[1]),
+                              ],
+                            ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: _ModeCard(
-                        icon: Icons.smartphone,
-                        title: 'Telefono / Tablet',
-                        subtitle: 'Tocco e schermo touch',
-                        suggested: _suggested == DeviceMode.touch,
-                        onTap: () => _choose(DeviceMode.touch),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -92,6 +132,7 @@ class _ModeCard extends StatelessWidget {
     required this.onTap,
     this.suggested = false,
     this.autofocus = false,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -101,6 +142,9 @@ class _ModeCard extends StatelessWidget {
   final bool suggested;
   final bool autofocus;
 
+  /// Tighter paddings/icon for screens with little height (phone landscape).
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     return TvFocusable(
@@ -108,16 +152,16 @@ class _ModeCard extends StatelessWidget {
       onTap: onTap,
       child: GlassSurface(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+          padding: EdgeInsets.symmetric(vertical: compact ? 14 : 32, horizontal: 16),
           child: Column(
             children: [
-              Icon(icon, size: 40, color: AppColors.accent),
-              const SizedBox(height: 16),
+              Icon(icon, size: compact ? 30 : 40, color: AppColors.accent),
+              SizedBox(height: compact ? 8 : 16),
               Text(title, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
               const SizedBox(height: 4),
               Text(subtitle, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
               if (suggested) ...[
-                const SizedBox(height: 12),
+                SizedBox(height: compact ? 8 : 12),
                 const Chip(
                   label: Text('Consigliato', style: TextStyle(color: Colors.black)),
                   backgroundColor: Colors.white,

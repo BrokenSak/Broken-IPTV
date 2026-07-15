@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
@@ -138,6 +139,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    // Only the player is landscape-only on Android: the rest of the app
+    // rotates freely. Restored in dispose().
+    if (Platform.isAndroid) {
+      unawaited(SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]));
+    }
     final settings = ref.read(playerSettingsProvider);
     _aspect = settings.aspect;
     _subtitlesOn = settings.subtitlesEnabled;
@@ -339,6 +348,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    // Leaving the player: give rotation back to the system (empty list =
+    // platform default, i.e. free rotation).
+    if (Platform.isAndroid) {
+      unawaited(SystemChrome.setPreferredOrientations(const []));
+    }
     // Silence immediately, then tear the native player down defensively.
     // NB: the "audio keeps playing after exit" bug only ever showed on
     // VOD/series — for live, progress-save is skipped so the teardown always
