@@ -7,7 +7,7 @@
 **Player IPTV per Android e Windows da un unico codebase Flutter.**<br>
 Pannelli Xtream Codes e playlist M3U + XMLTV, con EPG, VOD e serie.
 
-[![Release](https://img.shields.io/github/v/release/BrokenSak/broken_iptv?label=release&color=2ea44f)](https://github.com/BrokenSak/broken_iptv/releases/latest)
+[![Release](https://img.shields.io/github/v/release/BrokenSak/Broken-IPTV?label=release&color=2ea44f)](https://github.com/BrokenSak/Broken-IPTV/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Piattaforme](https://img.shields.io/badge/piattaforme-Android%20%C2%B7%20Windows-555555)](#download)
 
@@ -21,7 +21,7 @@ Pannelli Xtream Codes e playlist M3U + XMLTV, con EPG, VOD e serie.
 
 ## Download
 
-Dalla [pagina delle release](https://github.com/BrokenSak/broken_iptv/releases/latest):
+Dalla [pagina delle release](https://github.com/BrokenSak/Broken-IPTV/releases/latest):
 
 | Piattaforma | File | Note |
 |---|---|---|
