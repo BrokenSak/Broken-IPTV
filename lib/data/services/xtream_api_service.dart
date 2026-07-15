@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 
 import 'dio_error_utils.dart';
+import 'panel_http.dart';
 
 class XtreamAuthResult {
   const XtreamAuthResult({
@@ -24,10 +23,8 @@ class XtreamAuthResult {
 /// field is parsed defensively.
 class XtreamApiService {
   XtreamApiService({Dio? dio})
-      : _dio = dio ?? Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 15),
-        ));
+      : _dio = dio ??
+            createPanelDio(receiveTimeout: const Duration(seconds: 20));
 
   final Dio _dio;
 
@@ -49,19 +46,6 @@ class XtreamApiService {
     return int.tryParse(v.toString());
   }
 
-  /// Decodes the panel response to JSON regardless of Content-Type.
-  static dynamic _decodeJson(dynamic data) {
-    if (data == null) return null;
-    if (data is! String) return data;
-    final text = data.trim();
-    if (text.isEmpty) return null;
-    try {
-      return jsonDecode(text);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<XtreamAuthResult> testConnection({
     required String host,
     required String username,
@@ -80,7 +64,7 @@ class XtreamApiService {
         options: Options(responseType: ResponseType.plain),
       );
 
-      final data = _decodeJson(response.data);
+      final data = decodePanelJson(response.data);
       if (data is! Map) {
         return const XtreamAuthResult(
           success: false,
@@ -117,27 +101,12 @@ class XtreamApiService {
         maxConnections: maxConnections,
       );
     } on DioException catch (e) {
-      return XtreamAuthResult(success: false, message: _messageForDioError(e));
+      return XtreamAuthResult(success: false, message: messageForDioError(e));
     } catch (_) {
       return const XtreamAuthResult(
         success: false,
         message: 'Errore imprevisto durante il test di connessione.',
       );
-    }
-  }
-
-  String _messageForDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Timeout: il server non ha risposto in tempo.';
-      case DioExceptionType.connectionError:
-        return 'Impossibile raggiungere il server. ${describeConnectionError(e)}';
-      case DioExceptionType.badResponse:
-        return 'Il server ha risposto con un errore (${e.response?.statusCode ?? '?'}).';
-      default:
-        return 'Errore di connessione: ${e.message ?? describeConnectionError(e)}';
     }
   }
 }

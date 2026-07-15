@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -140,8 +141,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final settings = ref.read(playerSettingsProvider);
     _aspect = settings.aspect;
     _subtitlesOn = settings.subtitlesEnabled;
-    _volume = settings.volume;
-    _volumeBeforeMute = settings.volume > 0 ? settings.volume : 100;
+    // On Android the volume is the system one, driven by the phone/remote
+    // hardware keys: keep the software volume at 100 (a remembered low/zero
+    // value would silently cap the hardware keys) and hide the in-app controls.
+    _volume = Platform.isAndroid ? 100 : settings.volume;
+    _volumeBeforeMute = _volume > 0 ? _volume : 100;
     _title = widget.channelName;
     _currentEpisodeId = widget.episodeId;
     _currentEpisodeLabel = widget.episodeLabel;
@@ -602,6 +606,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         audioTracks: _audioTracks,
                         currentAudioId: _currentAudioId,
                         onSelectAudio: _selectAudio,
+                        showVolume: !Platform.isAndroid,
                         position: _position,
                         duration: _duration,
                         volume: _volume,
@@ -812,6 +817,7 @@ class _ControlsPanel extends StatelessWidget {
     required this.audioTracks,
     required this.currentAudioId,
     required this.onSelectAudio,
+    required this.showVolume,
   });
 
   final bool playing;
@@ -843,6 +849,9 @@ class _ControlsPanel extends StatelessWidget {
   final List<AudioTrack> audioTracks;
   final String? currentAudioId;
   final ValueChanged<AudioTrack> onSelectAudio;
+
+  /// False on Android: volume is handled by the hardware keys there.
+  final bool showVolume;
 
   @override
   Widget build(BuildContext context) {
@@ -924,23 +933,27 @@ class _ControlsPanel extends StatelessWidget {
                   forward: true,
                   onPressed: onSkipForward,
                 ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: Icon(
-                  volume > 0 ? Icons.volume_up : Icons.volume_off,
-                  color: Colors.white,
+              // On Android the hardware keys (phone/remote) drive the system
+              // volume, so the in-app mute + slider only exist on desktop.
+              if (showVolume) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(
+                    volume > 0 ? Icons.volume_up : Icons.volume_off,
+                    color: Colors.white,
+                  ),
+                  tooltip: volume > 0 ? 'Muto' : 'Riattiva audio',
+                  onPressed: onMute,
                 ),
-                tooltip: volume > 0 ? 'Muto' : 'Riattiva audio',
-                onPressed: onMute,
-              ),
-              SizedBox(
-                width: 110,
-                child: Slider(
-                  value: volume.clamp(0, 100),
-                  max: 100,
-                  onChanged: onVolume,
+                SizedBox(
+                  width: 110,
+                  child: Slider(
+                    value: volume.clamp(0, 100),
+                    max: 100,
+                    onChanged: onVolume,
+                  ),
                 ),
-              ),
+              ],
               const Spacer(),
               // Speed only makes sense for on-demand content, not live.
               if (!isLive)

@@ -17,11 +17,14 @@
         <!-- usesCleartextTraffic + networkSecurityConfig: many Xtream/M3U panels
              are served over plain HTTP. Android 9+ blocks cleartext by default,
              which is why the playlist didn't load on the phone. -->
+        <!-- screenOrientation=sensorLandscape: the app is landscape-only on
+             Android (phone/TV), both landscape directions allowed. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"

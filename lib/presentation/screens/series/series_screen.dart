@@ -13,6 +13,7 @@ import '../../../state/watch_progress_providers.dart';
 import '../../common/catalog_scaffold.dart';
 import '../../common/error_retry.dart';
 import '../../common/favorite_button.dart';
+import '../../common/grid_metrics.dart';
 import '../../common/tv_focusable.dart';
 import '../../common/watch_bar.dart';
 
@@ -113,12 +114,12 @@ class _SeriesScreenState extends ConsumerState<SeriesScreen> {
 
 Widget _posterGrid(List<SeriesItem> items) {
   return GridView.builder(
-    padding: const EdgeInsets.all(20),
-    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: 160,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
-      childAspectRatio: 0.62,
+    padding: EdgeInsets.all(GridMetrics.gridPadding),
+    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: GridMetrics.posterExtent,
+      mainAxisSpacing: GridMetrics.spacing,
+      crossAxisSpacing: GridMetrics.spacing,
+      childAspectRatio: GridMetrics.posterRatio,
     ),
     itemCount: items.length,
     itemBuilder: (context, index) => _SeriesPoster(item: items[index], autofocus: index == 0),
@@ -141,12 +142,12 @@ class _SeriesContinue extends ConsumerWidget {
       return const Center(child: Text('Niente da riprendere. Guarda un episodio per vederlo qui.'));
     }
     return GridView.builder(
-      padding: const EdgeInsets.all(20),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 160,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: 0.5,
+      padding: EdgeInsets.all(GridMetrics.gridPadding),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: GridMetrics.posterExtent,
+        mainAxisSpacing: GridMetrics.spacing,
+        crossAxisSpacing: GridMetrics.spacing,
+        childAspectRatio: GridMetrics.continueSeriesRatio,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {

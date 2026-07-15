@@ -1,5 +1,25 @@
 import 'package:dio/dio.dart';
 
+/// Shared Italian message for a failed panel HTTP call (was duplicated in
+/// XtreamSession and XtreamApiService).
+String messageForDioError(DioException e) {
+  switch (e.type) {
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+      return 'Timeout: il server non ha risposto in tempo.';
+    case DioExceptionType.connectionError:
+      // Surface the underlying reason: on Android the same panel can fail for
+      // DNS/refused/TLS reasons that a generic message would hide, making it
+      // impossible to tell a network issue from an old-device cert issue.
+      return 'Impossibile raggiungere il server. ${describeConnectionError(e)}';
+    case DioExceptionType.badResponse:
+      return 'Il server ha risposto con un errore (${e.response?.statusCode ?? '?'}).';
+    default:
+      return 'Errore di connessione: ${e.message ?? describeConnectionError(e)}';
+  }
+}
+
 /// Turns the opaque underlying error of a Dio [DioException] (usually a
 /// SocketException / HandshakeException / OS error) into a short, actionable
 /// Italian hint plus the raw detail.

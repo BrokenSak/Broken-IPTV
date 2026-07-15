@@ -13,6 +13,7 @@ import '../../../state/profile_providers.dart';
 import '../../common/catalog_scaffold.dart';
 import '../../common/error_retry.dart';
 import '../../common/favorite_button.dart';
+import '../../common/grid_metrics.dart';
 import '../../common/tv_focusable.dart';
 
 class LiveTvScreen extends ConsumerStatefulWidget {
@@ -100,6 +101,24 @@ class _LiveTvScreenState extends ConsumerState<LiveTvScreen> {
   }
 }
 
+/// Shared channel grid (tile size from [GridMetrics]: denser on Android).
+GridView _channelGridView({
+  required int itemCount,
+  required Widget Function(BuildContext, int) itemBuilder,
+}) {
+  return GridView.builder(
+    padding: EdgeInsets.all(GridMetrics.gridPadding),
+    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: GridMetrics.channelExtent,
+      mainAxisSpacing: GridMetrics.spacing,
+      crossAxisSpacing: GridMetrics.spacing,
+      childAspectRatio: GridMetrics.channelRatio,
+    ),
+    itemCount: itemCount,
+    itemBuilder: itemBuilder,
+  );
+}
+
 class _LiveFavorites extends ConsumerWidget {
   const _LiveFavorites();
 
@@ -113,14 +132,7 @@ class _LiveFavorites extends ConsumerWidget {
     if (favs.isEmpty) {
       return const Center(child: Text('Nessun canale preferito. Tocca il cuore su un canale.'));
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(20),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: 0.85,
-      ),
+    return _channelGridView(
       itemCount: favs.length,
       itemBuilder: (context, index) {
         final f = favs[index];
@@ -145,14 +157,7 @@ class _SearchResults extends ConsumerWidget {
         final q = query.toLowerCase();
         final filtered = channels.where((c) => c.name.toLowerCase().contains(q)).toList();
         if (filtered.isEmpty) return const Center(child: Text('Nessun canale trovato.'));
-        return GridView.builder(
-          padding: const EdgeInsets.all(20),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
+        return _channelGridView(
           itemCount: filtered.length,
           itemBuilder: (context, index) => _ChannelTile(channel: filtered[index]),
         );
@@ -180,14 +185,7 @@ class _ChannelGrid extends ConsumerWidget {
         if (list.isEmpty) {
           return const Center(child: Text('Nessun canale in questa categoria.'));
         }
-        return GridView.builder(
-          padding: const EdgeInsets.all(20),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
+        return _channelGridView(
           itemCount: list.length,
           itemBuilder: (context, index) {
             final channel = list[index];

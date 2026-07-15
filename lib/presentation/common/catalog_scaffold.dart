@@ -6,6 +6,7 @@ import '../../core/adult_filter.dart';
 import '../../core/fullscreen.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/xtream_category.dart';
+import 'grid_metrics.dart';
 import 'tv_focusable.dart';
 
 // Re-exported so catalog screens (which already import this file) can reuse it.
@@ -226,7 +227,8 @@ class _CategorySidebarState extends State<CategorySidebar> {
     }
 
     return SizedBox(
-      width: 250,
+      // Narrower on Android so the grid gets more columns (see GridMetrics).
+      width: GridMetrics.sidebarWidth,
       child: Scrollbar(
         child: ListView(
           // Reserve gutters on both sides so the selection highlight/glow is

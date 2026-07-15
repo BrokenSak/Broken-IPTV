@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 
 import '../models/channel.dart';
@@ -10,6 +8,7 @@ import '../models/vod_item.dart';
 import '../models/xtream_category.dart';
 import 'content_source.dart';
 import 'dio_error_utils.dart';
+import 'panel_http.dart';
 import 'xtream_api_service.dart';
 
 /// An authenticated Xtream Codes session for a specific profile. Unlike
@@ -23,10 +22,7 @@ class XtreamSession implements ContentSource {
     required this.password,
     Dio? dio,
   })  : host = XtreamApiService.normalizeHost(host),
-        _dio = dio ?? Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 20),
-        ));
+        _dio = dio ?? createPanelDio();
 
   final String host;
   final String username;
@@ -39,7 +35,8 @@ class XtreamSession implements ContentSource {
       // panels return JSON with a non-JSON Content-Type (e.g. text/html), and
       // Dio would then hand back the raw String instead of a Map/List. That
       // made expiry/account come back empty and catalogs look empty — all
-      // silently. Decoding by hand makes parsing independent of the header.
+      // silently. decodePanelJson also survives BOMs and PHP warnings printed
+      // before the payload.
       final response = await _dio.get(
         '$host/player_api.php',
         queryParameters: {
@@ -50,56 +47,26 @@ class XtreamSession implements ContentSource {
         },
         options: Options(responseType: ResponseType.plain),
       );
-      return _decodeJson(response.data);
+      return decodePanelJson(response.data);
     } on DioException catch (e) {
-      throw XtreamSessionException(_messageForDioError(e));
+      throw XtreamSessionException(messageForDioError(e));
     }
   }
 
-  /// Decodes the panel's response to JSON regardless of Content-Type. Returns
-  /// `null` for an empty body or a non-JSON page (e.g. an HTML error page),
-  /// which the typed getters turn into a clear "no valid data" error.
-  static dynamic _decodeJson(dynamic data) {
-    if (data == null) return null;
-    if (data is! String) return data; // already decoded by Dio
-    final text = data.trim();
-    if (text.isEmpty) return null;
-    try {
-      return jsonDecode(text);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _messageForDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Timeout: il server non ha risposto in tempo.';
-      case DioExceptionType.connectionError:
-        // Surface the underlying reason: on Android the same panel can fail for
-        // DNS/refused/TLS reasons that a generic message would hide, making it
-        // impossible to tell a network issue from an old-device cert issue.
-        return 'Impossibile raggiungere il server. ${describeConnectionError(e)}';
-      case DioExceptionType.badResponse:
-        return 'Il server ha risposto con un errore (${e.response?.statusCode ?? '?'}).';
-      default:
-        return 'Errore di connessione: ${e.message ?? describeConnectionError(e)}';
-    }
-  }
-
-  /// A non-List response to a "list" endpoint means the panel returned an
-  /// error/HTML page instead of data — usually a temporary block or a
-  /// connection-limit hit. Surface it as an error rather than silently empty.
-  void _expectList(dynamic data) {
-    if (data is! List) {
+  /// Coerces a "list" endpoint response to a List (tolerating the numeric-keys
+  /// object shape some panels emit). A response with neither shape means the
+  /// panel returned an error/HTML page instead of data — usually a temporary
+  /// block or a connection-limit hit — so surface it rather than show empty.
+  List<dynamic> _requireList(dynamic data) {
+    final list = asPanelList(data);
+    if (list == null) {
       throw XtreamSessionException(
         'Il server non ha restituito dati validi. '
         'Potrebbe aver raggiunto il limite di connessioni o bloccato '
         'temporaneamente l\'accesso. Riprova tra qualche minuto.',
       );
     }
+    return list;
   }
 
   static int? _asIntStatic(dynamic v) {
@@ -162,8 +129,7 @@ class XtreamSession implements ContentSource {
   @override
   Future<List<XtreamCategory>> getLiveCategories() async {
     final data = await _call('get_live_categories');
-    _expectList(data);
-    return (data as List)
+    return _requireList(data)
         .whereType<Map>()
         .map((e) => XtreamCategory.fromJson(e.cast<String, dynamic>()))
         .toList();
@@ -175,8 +141,7 @@ class XtreamSession implements ContentSource {
       'get_live_streams',
       categoryId != null ? {'category_id': categoryId} : null,
     );
-    if (data is! List) return const [];
-    return data
+    return (asPanelList(data) ?? const [])
         .whereType<Map>()
         .map((e) => Channel.fromJson(e.cast<String, dynamic>()))
         .toList();
@@ -189,8 +154,8 @@ class XtreamSession implements ContentSource {
       'limit': limit.toString(),
     });
     if (data is! Map) return const [];
-    final listings = data['epg_listings'];
-    if (listings is! List) return const [];
+    final listings = asPanelList(data['epg_listings']);
+    if (listings == null) return const [];
     return listings
         .whereType<Map>()
         .map((e) => EpgProgram.fromJson(e.cast<String, dynamic>()))
@@ -200,8 +165,7 @@ class XtreamSession implements ContentSource {
   @override
   Future<List<XtreamCategory>> getVodCategories() async {
     final data = await _call('get_vod_categories');
-    _expectList(data);
-    return (data as List)
+    return _requireList(data)
         .whereType<Map>()
         .map((e) => XtreamCategory.fromJson(e.cast<String, dynamic>()))
         .toList();
@@ -213,8 +177,7 @@ class XtreamSession implements ContentSource {
       'get_vod_streams',
       categoryId != null ? {'category_id': categoryId} : null,
     );
-    if (data is! List) return const [];
-    return data
+    return (asPanelList(data) ?? const [])
         .whereType<Map>()
         .map((e) => VodItem.fromJson(e.cast<String, dynamic>()))
         .toList();
@@ -232,8 +195,7 @@ class XtreamSession implements ContentSource {
   @override
   Future<List<XtreamCategory>> getSeriesCategories() async {
     final data = await _call('get_series_categories');
-    _expectList(data);
-    return (data as List)
+    return _requireList(data)
         .whereType<Map>()
         .map((e) => XtreamCategory.fromJson(e.cast<String, dynamic>()))
         .toList();
@@ -245,8 +207,7 @@ class XtreamSession implements ContentSource {
       'get_series',
       categoryId != null ? {'category_id': categoryId} : null,
     );
-    if (data is! List) return const [];
-    return data
+    return (asPanelList(data) ?? const [])
         .whereType<Map>()
         .map((e) => SeriesItem.fromJson(e.cast<String, dynamic>()))
         .toList();

@@ -9,6 +9,7 @@ import '../models/series_item.dart';
 import '../models/vod_item.dart';
 import '../models/xtream_category.dart';
 import 'content_source.dart';
+import 'panel_http.dart';
 
 /// A [ContentSource] backed by a plain **M3U** playlist plus an optional
 /// **XMLTV** EPG. Live channels and movies are parsed from the M3U (grouped by
@@ -19,11 +20,10 @@ import 'content_source.dart';
 class M3uSource implements ContentSource {
   M3uSource({required this.m3uUrl, this.epgUrl, Dio? dio})
       : _dio = dio ??
-            Dio(BaseOptions(
+            createPanelDio(
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 60),
-              headers: const {'User-Agent': 'BrokenIPTV'},
-            ));
+            );
 
   final String m3uUrl;
   final String? epgUrl;
