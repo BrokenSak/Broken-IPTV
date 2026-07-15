@@ -85,6 +85,18 @@ void main() {
     expect(adapter.calls, 1);
   });
 
+  test('short EPG is disk-cached: no repeat network call', () async {
+    final adapter = _FakeAdapter((o) => ResponseBody.fromString(
+        '{"epg_listings":[{"title":"UHJvZ3JhbW1h",'
+        '"start_timestamp":"1700000000","stop_timestamp":"1700003600"}]}',
+        200));
+    final s = session(adapter);
+    final first = await s.getShortEpg('7');
+    expect(first.single.title, 'Programma'); // base64-decoded
+    await s.getShortEpg('7');
+    expect(adapter.calls, 1); // second answered from cache
+  });
+
   test('network failure falls back to a stale cache entry', () async {
     // Seed an entry older than the TTL under the real key.
     await box.put('http://panel.test|u|get_live_categories|', {

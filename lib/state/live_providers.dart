@@ -120,10 +120,16 @@ final adultLiveIdsProvider = FutureProvider<Set<String>>((ref) async {
 });
 
 /// Per-category channel counts (categoryId -> count) for the live sidebar.
+/// Derived from [allChannelsProvider] so the full-catalog download happens
+/// once — this used to call getAllChannels() itself, firing a second parallel
+/// full download every time the TV screen opened.
 final liveCategoryCountsProvider = FutureProvider<Map<String, int>>((ref) async {
-  final repo = await ref.watch(liveRepositoryProvider.future);
-  if (repo == null) return const {};
-  final all = await repo.getAllChannels();
+  final List<Channel> all;
+  try {
+    all = await ref.watch(allChannelsProvider.future);
+  } on NoActivePlaylistException {
+    return const {};
+  }
   final counts = <String, int>{};
   for (final c in all) {
     counts[c.categoryId] = (counts[c.categoryId] ?? 0) + 1;

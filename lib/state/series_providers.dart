@@ -52,10 +52,15 @@ final adultSeriesIdsProvider = FutureProvider<Set<String>>((ref) async {
   return {for (final s in all) if (adultCats.contains(s.categoryId)) s.seriesId};
 });
 
+/// Derived from [allSeriesProvider] so the full-catalog download happens once
+/// (it used to fire its own parallel getAllItems() on screen open).
 final seriesCategoryCountsProvider = FutureProvider<Map<String, int>>((ref) async {
-  final repo = await ref.watch(seriesRepositoryProvider.future);
-  if (repo == null) return const {};
-  final all = await repo.getAllItems();
+  final List<SeriesItem> all;
+  try {
+    all = await ref.watch(allSeriesProvider.future);
+  } on NoActivePlaylistException {
+    return const {};
+  }
   final counts = <String, int>{};
   for (final s in all) {
     counts[s.categoryId] = (counts[s.categoryId] ?? 0) + 1;

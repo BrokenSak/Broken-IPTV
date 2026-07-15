@@ -10,6 +10,7 @@ import 'catalog_cache.dart';
 import 'content_source.dart';
 import 'dio_error_utils.dart';
 import 'panel_http.dart';
+import 'request_throttle.dart';
 import 'xtream_api_service.dart';
 
 /// An authenticated Xtream Codes session for a specific profile. Unlike
@@ -33,7 +34,7 @@ class XtreamSession implements ContentSource {
   final CatalogCache? _cache;
 
   /// Catalog actions worth caching on disk: big, slow on some panels, and
-  /// stable across a session. EPG and account info stay always-fresh.
+  /// stable across a session.
   static const _catalogActions = {
     'get_live_categories',
     'get_live_streams',
@@ -42,6 +43,31 @@ class XtreamSession implements ContentSource {
     'get_series_categories',
     'get_series',
   };
+
+  /// Short disk cache for the per-channel EPG too: re-entering a screen (or
+  /// relaunching the app) must not re-fire hundreds of `get_short_epg` calls.
+  static const _epgTtl = Duration(minutes: 15);
+
+  /// One global pacer for the EPG calls (see [RequestThrottle]): grids fire
+  /// them in bursts while scrolling, and panel flood protection blocks
+  /// accounts for exactly that pattern. Account info stays always-fresh.
+  static final _epgThrottle = RequestThrottle();
+
+  /// How long a cached response for [action] stays valid; null = don't cache.
+  Duration? _cacheTtlFor(String action) {
+    if (_catalogActions.contains(action)) return CatalogCache.ttl;
+    if (action == 'get_short_epg') return _epgTtl;
+    return null;
+  }
+
+  /// Whether a decoded payload is worth persisting (an error/challenge page
+  /// must never poison the cache). Catalogs are list-shaped; the EPG is a
+  /// map ({"epg_listings": [...]}) — an empty one is fine to cache too, so
+  /// guideless channels don't get re-queried on every visit.
+  bool _persistable(String action, dynamic decoded) {
+    if (action == 'get_short_epg') return decoded is Map || decoded is List;
+    return asPanelList(decoded) != null;
+  }
 
   // No password in the cache key: the box is plain on disk.
   String _cacheKey(String action, Map<String, String>? extra) {
@@ -62,13 +88,14 @@ class XtreamSession implements ContentSource {
 
   Future<dynamic> _call(String action, [Map<String, String>? extra]) async {
     final cache = _cache;
-    final cacheable = cache != null && _catalogActions.contains(action);
+    final ttl = _cacheTtlFor(action);
+    final cacheable = cache != null && ttl != null;
     final cacheKey = cacheable ? _cacheKey(action, extra) : '';
 
     // Fresh cache hit → skip the network entirely (slow panels take tens of
     // seconds per catalog call; see CatalogCache).
     if (cacheable) {
-      final hit = await cache.fresh(cacheKey);
+      final hit = await cache.fresh(cacheKey, maxAge: ttl);
       if (hit != null) return decodePanelJson(hit);
     }
 
@@ -80,16 +107,20 @@ class XtreamSession implements ContentSource {
       // made expiry/account come back empty and catalogs look empty — all
       // silently. decodePanelJson also survives BOMs and PHP warnings printed
       // before the payload.
-      final response = await _dio.get(
-        '$host/player_api.php',
-        queryParameters: {
-          'username': username,
-          'password': password,
-          if (action.isNotEmpty) 'action': action,
-          ...?extra,
-        },
-        options: Options(responseType: ResponseType.plain),
-      );
+      Future<Response<dynamic>> doGet() => _dio.get(
+            '$host/player_api.php',
+            queryParameters: {
+              'username': username,
+              'password': password,
+              if (action.isNotEmpty) 'action': action,
+              ...?extra,
+            },
+            options: Options(responseType: ResponseType.plain),
+          );
+      // EPG bursts get paced; everything else goes straight out.
+      final response = action == 'get_short_epg'
+          ? await _epgThrottle.run(doGet)
+          : await doGet();
       body = response.data;
     } on DioException catch (e) {
       // Network failure with any cached copy (even stale): serve the cache
@@ -103,11 +134,9 @@ class XtreamSession implements ContentSource {
 
     final decoded = decodePanelJson(body);
     if (cacheable) {
-      if (body is String && asPanelList(decoded) != null) {
-        // Persist only list-shaped payloads so an error/challenge page never
-        // poisons the cache.
+      if (body is String && _persistable(action, decoded)) {
         await cache.put(cacheKey, body);
-      } else if (asPanelList(decoded) == null) {
+      } else if (!_persistable(action, decoded)) {
         // Invalid response (block page, connection-limit error): prefer the
         // stale cached copy over surfacing an error.
         final stale = await cache.anyAge(cacheKey);

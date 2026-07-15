@@ -52,10 +52,15 @@ final adultVodIdsProvider = FutureProvider<Set<String>>((ref) async {
   return {for (final v in all) if (adultCats.contains(v.categoryId)) v.streamId};
 });
 
+/// Derived from [allVodProvider] so the full-catalog download happens once
+/// (it used to fire its own parallel getAllItems() on screen open).
 final vodCategoryCountsProvider = FutureProvider<Map<String, int>>((ref) async {
-  final repo = await ref.watch(vodRepositoryProvider.future);
-  if (repo == null) return const {};
-  final all = await repo.getAllItems();
+  final List<VodItem> all;
+  try {
+    all = await ref.watch(allVodProvider.future);
+  } on NoActivePlaylistException {
+    return const {};
+  }
   final counts = <String, int>{};
   for (final v in all) {
     counts[v.categoryId] = (counts[v.categoryId] ?? 0) + 1;

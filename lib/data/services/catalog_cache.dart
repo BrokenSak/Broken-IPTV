@@ -26,13 +26,14 @@ class CatalogCache {
     return '${ascii.substring(0, 160)}#${ascii.hashCode.toRadixString(16)}';
   }
 
-  /// Cached body for [key] if present and younger than [ttl].
-  Future<String?> fresh(String key) async {
+  /// Cached body for [key] if present and younger than [maxAge] (defaults to
+  /// [ttl]; the short-lived EPG entries pass their own).
+  Future<String?> fresh(String key, {Duration? maxAge}) async {
     final entry = await _box.get(_safeKey(key));
     if (entry == null) return null;
     final ts = entry['ts'] as int? ?? 0;
     final age = DateTime.now().millisecondsSinceEpoch - ts;
-    if (age > ttl.inMilliseconds) return null;
+    if (age > (maxAge ?? ttl).inMilliseconds) return null;
     return entry['body'] as String?;
   }
 
