@@ -14,30 +14,31 @@ void main() {
     await StorageService.init(testPath: dir.path);
   });
 
-  test('volume allows amplification above 100 up to kMaxPlayerVolume', () {
+  test('volume stays on the 0–100 UI scale', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final notifier = container.read(playerSettingsProvider.notifier);
 
-    notifier.setVolume(150);
-    expect(container.read(playerSettingsProvider).volume, 150);
+    notifier.setVolume(80);
+    expect(container.read(playerSettingsProvider).volume, 80);
 
-    notifier.setVolume(9999);
-    expect(container.read(playerSettingsProvider).volume, kMaxPlayerVolume);
+    // Out-of-range values (e.g. a 0–200 volume saved by an older build)
+    // must clamp back into the UI scale.
+    notifier.setVolume(180);
+    expect(container.read(playerSettingsProvider).volume, 100);
 
     notifier.setVolume(-5);
     expect(container.read(playerSettingsProvider).volume, 0);
   });
 
-  test('amplified volume survives a reload from prefs', () {
+  test('volume survives a reload from prefs', () {
     final first = ProviderContainer();
     addTearDown(first.dispose);
-    first.read(playerSettingsProvider.notifier).setVolume(180);
+    first.read(playerSettingsProvider.notifier).setVolume(65);
 
-    // A fresh container re-runs build(), reading back from the prefs box:
-    // the old code clamped the loaded value to 100.
+    // A fresh container re-runs build(), reading back from the prefs box.
     final second = ProviderContainer();
     addTearDown(second.dispose);
-    expect(second.read(playerSettingsProvider).volume, 180);
+    expect(second.read(playerSettingsProvider).volume, 65);
   });
 }

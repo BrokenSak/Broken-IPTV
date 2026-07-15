@@ -22,6 +22,11 @@ import '../../../state/watch_progress_providers.dart';
 
 const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
+/// Desktop-only software gain on top of the 0–100 UI volume: IPTV streams are
+/// often encoded quiet, so UI 100% maps to mpv 150 (the UI keeps its normal
+/// 0–100 scale). Android stays at 1.0 — volume belongs to the hardware keys.
+final double _volumeBoost = Platform.isAndroid ? 1.0 : 1.5;
+
 /// Human-readable label for an audio track (language name, else title, else id).
 String _audioTrackLabel(AudioTrack t) {
   final lang = (t.language ?? '').trim().toLowerCase();
@@ -164,17 +169,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     _player = Player();
     _controller = VideoController(_player);
-    // Many IPTV streams carry low-encoded audio, so 100% alone can be too
-    // quiet: on desktop raise mpv's amplification ceiling (`volume-max`,
-    // default 130) so the slider reaches kMaxPlayerVolume (200%, VLC-style).
-    // Then re-apply the remembered volume: a set issued before the new
-    // ceiling landed would have been clamped to the old one.
+    // The desktop boost needs headroom above mpv's default `volume-max` of
+    // 130: raise the ceiling to UI 100% × boost, then re-apply the remembered
+    // volume — a set issued before the new ceiling landed would have been
+    // clamped to the old one.
     final native = _player.platform;
     if (!Platform.isAndroid && native is NativePlayer) {
       unawaited(native
-          .setProperty('volume-max', kMaxPlayerVolume.round().toString())
+          .setProperty('volume-max', (100 * _volumeBoost).round().toString())
           .then((_) {
-        if (mounted) _player.setVolume(_volume);
+        if (mounted) _applyVolume(_volume);
       }).catchError((_) {}));
     }
 
@@ -215,7 +219,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
       }),
       _player.stream.volume.listen((volume) {
-        if (mounted) setState(() => _volume = volume);
+        // mpv reports the boosted value: bring it back to the 0–100 UI scale.
+        final ui = (volume / _volumeBoost).clamp(0.0, 100.0);
+        if (mounted) setState(() => _volume = ui);
       }),
       // New media resets track selection: re-apply the subtitle preference and
       // pick up the available audio tracks (auto-selecting Italian) each time
@@ -251,7 +257,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player.open(Media(url));
     _player.setRate(_rate);
     // Apply the remembered volume to the new media.
-    _player.setVolume(_volume);
+    _applyVolume(_volume);
     if (!_subtitlesOn) _player.setSubtitleTrack(SubtitleTrack.no());
   }
 
@@ -472,12 +478,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
+  /// Sends a 0–100 UI volume to the player, applying the desktop gain boost.
+  void _applyVolume(double uiVolume) {
+    _player.setVolume(uiVolume * _volumeBoost);
+  }
+
   void _toggleMute() {
     if (_volume > 0) {
       _volumeBeforeMute = _volume;
-      _player.setVolume(0);
+      _applyVolume(0);
     } else {
-      _player.setVolume(_volumeBeforeMute > 0 ? _volumeBeforeMute : 100);
+      _applyVolume(_volumeBeforeMute > 0 ? _volumeBeforeMute : 100);
     }
     _poke();
   }
@@ -654,7 +665,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           _poke();
                         },
                         onVolume: (v) {
-                          _player.setVolume(v);
+                          _applyVolume(v);
                           ref.read(playerSettingsProvider.notifier).setVolume(v);
                           _poke();
                         },
@@ -978,8 +989,8 @@ class _ControlsPanel extends StatelessWidget {
                 SizedBox(
                   width: 110,
                   child: Slider(
-                    value: volume.clamp(0, kMaxPlayerVolume),
-                    max: kMaxPlayerVolume,
+                    value: volume.clamp(0, 100),
+                    max: 100,
                     onChanged: onVolume,
                   ),
                 ),
