@@ -1,43 +1,83 @@
+<div align="center">
+
+<img src="assets/icon/app_icon.png" width="96" alt="Icona di Broken IPTV">
+
 # Broken IPTV
 
-App IPTV in **Flutter** per **Android** (telefono/tablet e TV con telecomando) e **Windows**,
-compatibile con pannelli **Xtream Codes** e playlist **M3U + XMLTV**. Un solo codebase,
-due deliverable: APK Android e installer Windows.
+**Player IPTV per Android e Windows da un unico codebase Flutter.**<br>
+Pannelli Xtream Codes e playlist M3U + XMLTV, con EPG, VOD e serie.
 
-> È un **player generico**: non include né distribuisce alcun contenuto, canale o playlist.
-> Le credenziali del proprio abbonamento si inseriscono a runtime e restano sul dispositivo.
+[![Release](https://img.shields.io/github/v/release/BrokenSak/broken_iptv?label=release&color=2ea44f)](https://github.com/BrokenSak/broken_iptv/releases/latest)
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Piattaforme](https://img.shields.io/badge/piattaforme-Android%20%C2%B7%20Windows-555555)](#download)
+
+[Download](#download) · [Caratteristiche](#caratteristiche) · [Build dal sorgente](#build-dal-sorgente)
+
+</div>
+
+> [!IMPORTANT]
+> Broken IPTV è un **player generico**: non include né distribuisce contenuti, canali o playlist.
+> Le credenziali del proprio abbonamento si inseriscono all'avvio e restano solo sul dispositivo.
+
+## Download
+
+Dalla [pagina delle release](https://github.com/BrokenSak/broken_iptv/releases/latest):
+
+| Piattaforma | File | Note |
+|---|---|---|
+| **Android** — telefono, tablet e TV | `BrokenIPTV.apk` | App sideload: Play Protect può chiedere conferma («Più dettagli» → «Installa comunque») |
+| **Windows** 10/11 | `BrokenIPTV.exe` | Installer per utente, nessun privilegio di amministratore |
 
 ## Caratteristiche
-- **Live TV** con categorie, EPG sotto i canali (con offset `+N`) e overlay lista canali nel player.
-- **Film e Serie** (VOD) con dettaglio, descrizione, stagioni, "Continua a guardare" e "Ultimi aggiunti".
-- **Ricerca** globale cross-catalogo con anteprime.
-- **Preferiti** per canali, film e serie.
-- Categorie fisse: Continua a guardare · Preferiti · Tutti · Ultimi aggiunti.
-- Gruppo **Adulti** collassabile (contenuti per adulti raggruppati e nascosti di default, esclusi dalle viste aggregate).
-- **Player** `media_kit`: sottotitoli, selezione **lingua audio** (default italiano), rapporto d'aspetto,
-  velocità, salti configurabili, ripresa da dove si era rimasti, auto-riconnessione e fallback `.ts`/`.m3u8`.
-- **Pannello account** (scadenza, connessioni, server) e **speed test** (fast.com).
-- Tema scuro "liquid glass", schermo intero, multi-playlist.
+
+### 📺 Live TV
+- Canali per categoria, con **EPG** sotto la lista e offset orario configurabile
+- Overlay con l'elenco dei canali direttamente nel player
+- Guida completa scaricata in una sola richiesta (`xmltv.php`), con cache locale per profilo
+
+### 🎬 Film e serie
+- Cataloghi VOD con dettaglio, descrizione e stagioni
+- **Continua a guardare** e **Ultimi aggiunti** sempre a portata di mano
+- Ripresa della riproduzione dal punto in cui si era rimasti
+
+### 🔍 Esperienza
+- **Ricerca globale** su canali, film e serie, con anteprime
+- **Preferiti** per ogni tipo di contenuto
+- Gruppo **Adulti** collassabile: nascosto di default ed escluso dalle viste aggregate
+- Tema scuro «liquid glass», schermo intero, **multi-playlist**
+
+### ⚙️ Player
+- Motore `media_kit` (libmpv): sottotitoli, scelta della lingua audio, rapporto d'aspetto, velocità e salti configurabili
+- Auto-riconnessione e fallback automatico `.ts`/`.m3u8`
+- Pannello account (scadenza, connessioni, server) e speed test integrato
 
 ## Stack
-Flutter · Riverpod · go_router · media_kit · hive_ce · dio · flutter_secure_storage · window_manager.
 
-## Build
-Prerequisiti e dettagli completi in [`HANDOFF.md`](HANDOFF.md).
+Flutter · Riverpod · go_router · media_kit · Hive CE · dio · flutter_secure_storage · window_manager
+
+## Build dal sorgente
+
+Prerequisiti: [Flutter](https://docs.flutter.dev/get-started/install) 3.x su canale stable. Per Android servono
+Android SDK e JDK; per l'installer Windows serve [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ```bash
 flutter pub get
 flutter analyze && flutter test
 
-# Windows
+# Windows — EXE in build/windows/x64/runner/Release/
 flutter build windows --release
 
-# Android (APK firmata: richiede android/key.properties + keystore, non inclusi nel repo)
+# Installer Windows (dopo la build release) — output: installer/output/BrokenIPTV.exe
+ISCC installer/broken_iptv.iss
+
+# Android — APK in build/app/outputs/flutter-apk/app-release.apk
 flutter build apk --release
 ```
 
-> **Firma Android:** `android/key.properties` e il keystore `.jks` **non** sono nel repository
-> (esclusi da `.gitignore`). Per produrre una release firmata vanno forniti localmente.
+> [!NOTE]
+> La release Android è firmata con un keystore locale: `android/key.properties` e il file `.jks`
+> **non sono nel repository**. Senza di essi si può comunque buildare e firmare con le proprie chiavi.
 
 ## Licenza
-Uso personale. Nessuna garanzia.
+
+Progetto a uso personale, distribuito senza alcuna garanzia.
