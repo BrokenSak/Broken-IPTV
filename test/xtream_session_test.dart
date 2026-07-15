@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:broken_iptv/data/services/catalog_cache.dart';
+import 'package:broken_iptv/data/services/epg_store.dart';
 import 'package:broken_iptv/data/services/xtream_session.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +97,48 @@ void main() {
     expect(first.single.title, 'Programma'); // base64-decoded
     await s.getShortEpg('7');
     expect(adapter.calls, 1); // second answered from cache
+  });
+
+  test('bulk EPG store answers tiles without get_short_epg calls', () async {
+    String two(int n) => n.toString().padLeft(2, '0');
+    String ts(DateTime d) {
+      final u = d.toUtc();
+      return '${u.year}${two(u.month)}${two(u.day)}'
+          '${two(u.hour)}${two(u.minute)}${two(u.second)} +0000';
+    }
+
+    final now = DateTime.now();
+    final xml = '<tv><programme start="${ts(now.subtract(const Duration(minutes: 5)))}" '
+        'stop="${ts(now.add(const Duration(minutes: 55)))}" channel="rai1.it">'
+        '<title>Dal bulk</title></programme></tv>';
+
+    final requestedActions = <String>[];
+    final adapter = _FakeAdapter((o) {
+      final action = o.queryParameters['action'] as String?;
+      requestedActions.add(action ?? '');
+      if (action == 'get_live_streams') {
+        return ResponseBody.fromString(
+            '[{"stream_id":7,"name":"Rai 1","category_id":"5",'
+            '"epg_channel_id":"rai1.it"}]',
+            200);
+      }
+      return ResponseBody.fromString('{"epg_listings":[]}', 200);
+    });
+
+    final s = XtreamSession(
+      host: 'http://panel.test',
+      username: 'u',
+      password: 'p',
+      dio: Dio()..httpClientAdapter = adapter,
+      cache: CatalogCache(box),
+      epgStore: EpgStore(fetch: () async => utf8.encode(xml)),
+    );
+
+    final programs = await s.getShortEpg('7');
+    expect(programs.single.title, 'Dal bulk');
+    // Only the channel list was fetched for the id mapping — the guide came
+    // from the single bulk download, not from get_short_epg.
+    expect(requestedActions, ['get_live_streams']);
   });
 
   test('network failure falls back to a stale cache entry', () async {

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -9,6 +8,7 @@ import '../models/series_item.dart';
 import '../models/vod_item.dart';
 import '../models/xtream_category.dart';
 import 'content_source.dart';
+import 'epg_store.dart';
 import 'panel_http.dart';
 
 /// A [ContentSource] backed by a plain **M3U** playlist plus an optional
@@ -164,86 +164,20 @@ class M3uSource implements ContentSource {
       url,
       options: Options(responseType: ResponseType.bytes),
     );
-    var bytes = resp.data ?? const [];
+    final bytes = resp.data ?? const [];
     if (bytes.isEmpty) return;
-    // Gunzip if needed (magic bytes 0x1f 0x8b), common for XMLTV feeds.
-    if (bytes.length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
-      bytes = GZipCodec().decode(bytes);
-    }
-    final xml = utf8.decode(bytes, allowMalformed: true);
 
-    // Only keep programmes for channels present in the playlist, within a
-    // now-6h … now+36h window, to bound memory.
+    // Only keep programmes for channels present in the playlist (the shared
+    // parser already bounds the time window to now-6h … now+36h).
     final wantIds = _allChannels
         .map((c) => c.epgChannelId)
         .whereType<String>()
         .toSet();
     if (wantIds.isEmpty) return;
-    final from = DateTime.now().subtract(const Duration(hours: 6));
-    final to = DateTime.now().add(const Duration(hours: 36));
 
-    final progRe = RegExp(r'<programme\b([^>]*)>(.*?)</programme>', dotAll: true);
-    final titleRe = RegExp(r'<title[^>]*>(.*?)</title>', dotAll: true);
-    final descRe = RegExp(r'<desc[^>]*>(.*?)</desc>', dotAll: true);
-
-    for (final m in progRe.allMatches(xml)) {
-      final attrs = m.group(1) ?? '';
-      final body = m.group(2) ?? '';
-      final channel = _attr(attrs, 'channel');
-      if (channel == null || !wantIds.contains(channel)) continue;
-      final start = _parseXmltvTime(_attr(attrs, 'start'));
-      final stop = _parseXmltvTime(_attr(attrs, 'stop'));
-      if (start == null || stop == null) continue;
-      if (stop.isBefore(from) || start.isAfter(to)) continue;
-      final title = _unescape((titleRe.firstMatch(body)?.group(1) ?? '').trim());
-      final desc = _unescape((descRe.firstMatch(body)?.group(1) ?? '').trim());
-      (_epgByChannel[channel] ??= []).add(
-        EpgProgram(title: title.isEmpty ? 'Programma' : title, description: desc, start: start, end: stop),
-      );
-    }
-    for (final list in _epgByChannel.values) {
-      list.sort((a, b) => a.start.compareTo(b.start));
-    }
-  }
-
-  static String? _attr(String attrs, String key) {
-    final m = RegExp('$key="([^"]*)"').firstMatch(attrs);
-    return m?.group(1);
-  }
-
-  /// Parses an XMLTV timestamp like `20240101203000 +0100`.
-  static DateTime? _parseXmltvTime(String? s) {
-    if (s == null || s.length < 14) return null;
-    try {
-      final y = int.parse(s.substring(0, 4));
-      final mo = int.parse(s.substring(4, 6));
-      final d = int.parse(s.substring(6, 8));
-      final h = int.parse(s.substring(8, 10));
-      final mi = int.parse(s.substring(10, 12));
-      final se = int.parse(s.substring(12, 14));
-      var dt = DateTime.utc(y, mo, d, h, mi, se);
-      final tz = RegExp(r'([+-])(\d{2})(\d{2})').firstMatch(s);
-      if (tz != null) {
-        final sign = tz.group(1) == '-' ? 1 : -1; // convert to UTC
-        final offH = int.parse(tz.group(2)!);
-        final offM = int.parse(tz.group(3)!);
-        dt = dt.add(Duration(hours: sign * offH, minutes: sign * offM));
-      }
-      return dt.toLocal();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String _unescape(String s) {
-    return s
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&apos;', "'")
-        .replaceAll('<![CDATA[', '')
-        .replaceAll(']]>', '');
+    _epgByChannel
+      ..clear()
+      ..addAll(parseXmltvBytes(bytes, onlyChannels: wantIds));
   }
 
   // ---- ContentSource ----

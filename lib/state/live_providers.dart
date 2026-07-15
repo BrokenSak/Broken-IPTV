@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../core/adult_filter.dart';
 import '../data/models/channel.dart';
@@ -8,8 +12,11 @@ import '../data/models/xtream_profile.dart';
 import '../data/repositories/live_repository.dart';
 import '../data/services/catalog_cache.dart';
 import '../data/services/content_source.dart';
+import '../data/services/epg_store.dart';
 import '../data/services/m3u_source.dart';
+import '../data/services/panel_http.dart';
 import '../data/services/storage_service.dart';
+import '../data/services/xtream_api_service.dart';
 import '../data/services/xtream_session.dart';
 import 'profile_providers.dart';
 
@@ -47,13 +54,40 @@ final xtreamSessionProvider = FutureProvider<ContentSource?>((ref) async {
   final password = await ref.watch(profileRepositoryProvider).getPassword(profileId);
   if (password == null) return null;
 
+  final host = XtreamApiService.normalizeHost(profile.host);
+  final username = profile.username;
+
+  // Bulk EPG (xmltv.php): the whole guide in ONE request, cached on a file
+  // per profile — instead of one get_short_epg per visible channel tile.
+  File? epgFile;
+  try {
+    final dir = await getApplicationSupportDirectory();
+    final safe = '$host|$username'.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    epgFile = File('${dir.path}${Platform.pathSeparator}epg_$safe.xml');
+  } catch (_) {
+    epgFile = null; // no platform dir (tests): memory-only for the session
+  }
+  final epgStore = EpgStore(
+    fetch: () async {
+      final dio = createPanelDio(receiveTimeout: const Duration(minutes: 3));
+      final resp = await dio.get<List<int>>(
+        '$host/xmltv.php',
+        queryParameters: {'username': username, 'password': password},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return resp.data;
+    },
+    cacheFile: epgFile,
+  );
+
   return XtreamSession(
     host: profile.host,
-    username: profile.username,
+    username: username,
     password: password,
     // Disk cache for the catalog calls: instant loads on slow panels and an
     // offline fallback (see CatalogCache).
     cache: CatalogCache(StorageService.catalogCacheBox),
+    epgStore: epgStore,
   );
 });
 

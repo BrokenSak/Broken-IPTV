@@ -9,6 +9,7 @@ import '../models/xtream_category.dart';
 import 'catalog_cache.dart';
 import 'content_source.dart';
 import 'dio_error_utils.dart';
+import 'epg_store.dart';
 import 'panel_http.dart';
 import 'request_throttle.dart';
 import 'xtream_api_service.dart';
@@ -24,6 +25,7 @@ class XtreamSession implements ContentSource {
     required this.password,
     Dio? dio,
     this._cache, // exposed to callers as `cache:`
+    this._epgStore, // exposed to callers as `epgStore:`
   })  : host = XtreamApiService.normalizeHost(host),
         _dio = dio ?? createPanelDio();
 
@@ -32,6 +34,19 @@ class XtreamSession implements ContentSource {
   final String password;
   final Dio _dio;
   final CatalogCache? _cache;
+
+  /// Bulk EPG (panel xmltv.php): one download for the whole guide, so channel
+  /// tiles don't turn into hundreds of per-channel calls. Null → per-channel.
+  final EpgStore? _epgStore;
+
+  /// streamId → epg_channel_id, built once from the (disk-cached) full
+  /// channel list; memoized as a future so concurrent tiles share the work.
+  Future<Map<String, String>>? _epgIdMap;
+
+  /// In-flight de-duplication for cacheable calls: concurrent identical
+  /// requests (e.g. counts + search both wanting the full channel list before
+  /// the cache is written) share one network hit.
+  final _inflight = <String, Future<dynamic>>{};
 
   /// Catalog actions worth caching on disk: big, slow on some panels, and
   /// stable across a session.
@@ -86,11 +101,31 @@ class XtreamSession implements ContentSource {
     await _cache?.clearPrefix('$host|$username|');
   }
 
-  Future<dynamic> _call(String action, [Map<String, String>? extra]) async {
+  Future<dynamic> _call(String action, [Map<String, String>? extra]) {
     final cache = _cache;
     final ttl = _cacheTtlFor(action);
-    final cacheable = cache != null && ttl != null;
-    final cacheKey = cacheable ? _cacheKey(action, extra) : '';
+    if (cache == null || ttl == null) {
+      return _fetch(action, extra, null, null, '');
+    }
+    final cacheKey = _cacheKey(action, extra);
+    // Single-flight per key: identical concurrent calls share one request.
+    // NB: the cleanup callback must have a BLOCK body — `=> map.remove(k)`
+    // returns the removed future and whenComplete would then wait for it,
+    // i.e. the future would wait for itself (deadlock: every call hung).
+    return _inflight[cacheKey] ??=
+        _fetch(action, extra, cache, ttl, cacheKey).whenComplete(() {
+      _inflight.remove(cacheKey);
+    });
+  }
+
+  Future<dynamic> _fetch(
+    String action,
+    Map<String, String>? extra,
+    CatalogCache? cache,
+    Duration? ttl,
+    String cacheKey,
+  ) async {
+    final cacheable = cache != null;
 
     // Fresh cache hit → skip the network entirely (slow panels take tens of
     // seconds per catalog call; see CatalogCache).
@@ -242,6 +277,19 @@ class XtreamSession implements ContentSource {
 
   @override
   Future<List<EpgProgram>> getShortEpg(String streamId, {int limit = 20}) async {
+    // Preferred path: the bulk guide (xmltv.php), downloaded once for ALL
+    // channels — the way mainstream IPTV apps do it. Falls back to the
+    // per-channel call (throttled + cached) when the panel has no usable
+    // XMLTV or this channel isn't in it.
+    final store = _epgStore;
+    if (store != null && await store.ensureLoaded()) {
+      final epgId = await _epgChannelIdOf(streamId);
+      if (epgId != null) {
+        final programs = store.programsFor(epgId, limit: limit);
+        if (programs != null && programs.isNotEmpty) return programs;
+      }
+    }
+
     final data = await _call('get_short_epg', {
       'stream_id': streamId,
       'limit': limit.toString(),
@@ -253,6 +301,24 @@ class XtreamSession implements ContentSource {
         .whereType<Map>()
         .map((e) => EpgProgram.fromJson(e.cast<String, dynamic>()))
         .toList();
+  }
+
+  /// Maps a live stream id to its `epg_channel_id` using the (disk-cached)
+  /// full channel list; memoized so concurrent tiles share one lookup.
+  Future<String?> _epgChannelIdOf(String streamId) {
+    final future = _epgIdMap ??= () async {
+      try {
+        final channels = await getLiveStreams();
+        return {
+          for (final c in channels)
+            if (c.epgChannelId != null && c.epgChannelId!.isNotEmpty)
+              c.streamId: c.epgChannelId!,
+        };
+      } catch (_) {
+        return <String, String>{};
+      }
+    }();
+    return future.then((map) => map[streamId]);
   }
 
   @override

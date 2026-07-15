@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/xtream_profile.dart';
@@ -81,6 +82,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await StorageService.favoritesBox.clear();
     await StorageService.watchProgressBox.clear();
     await StorageService.catalogCacheBox.clear();
+    // Bulk EPG files (one per profile), best-effort.
+    try {
+      final dir = await getApplicationSupportDirectory();
+      await for (final f in dir.list()) {
+        if (f is File && f.uri.pathSegments.last.startsWith('epg_')) {
+          await f.delete();
+        }
+      }
+    } catch (_) {}
     ref.invalidate(favoritesProvider);
     ref.invalidate(watchProgressProvider);
     ref.invalidate(liveCategoriesProvider);
