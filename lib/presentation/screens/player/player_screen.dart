@@ -164,6 +164,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     _player = Player();
     _controller = VideoController(_player);
+    // Many IPTV streams carry low-encoded audio, so 100% alone can be too
+    // quiet: on desktop raise mpv's amplification ceiling (`volume-max`,
+    // default 130) so the slider reaches kMaxPlayerVolume (200%, VLC-style).
+    // Then re-apply the remembered volume: a set issued before the new
+    // ceiling landed would have been clamped to the old one.
+    final native = _player.platform;
+    if (!Platform.isAndroid && native is NativePlayer) {
+      unawaited(native
+          .setProperty('volume-max', kMaxPlayerVolume.round().toString())
+          .then((_) {
+        if (mounted) _player.setVolume(_volume);
+      }).catchError((_) {}));
+    }
 
     _subscriptions.addAll([
       _player.stream.error.listen((message) {
@@ -965,9 +978,20 @@ class _ControlsPanel extends StatelessWidget {
                 SizedBox(
                   width: 110,
                   child: Slider(
-                    value: volume.clamp(0, 100),
-                    max: 100,
+                    value: volume.clamp(0, kMaxPlayerVolume),
+                    max: kMaxPlayerVolume,
                     onChanged: onVolume,
+                  ),
+                ),
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    '${volume.round()}%',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

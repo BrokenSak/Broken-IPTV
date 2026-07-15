@@ -33,7 +33,8 @@ class PlayerSettings {
   /// Seek step for the skip forward/back buttons (10, 30 or 60 seconds).
   final int skipSeconds;
 
-  /// Last used player volume (0–100), remembered across sessions.
+  /// Last used player volume (0–[kMaxPlayerVolume]), remembered across
+  /// sessions. Above 100 = software amplification.
   final double volume;
 
   PlayerSettings copyWith({
@@ -52,6 +53,11 @@ class PlayerSettings {
 }
 
 const kSkipOptions = [10, 30, 60];
+
+/// Upper bound of the software volume. Values above 100 amplify (mpv
+/// `volume-max`, VLC-style): many IPTV streams carry low-encoded audio and
+/// 100% alone is too quiet. Desktop only — on Android the hardware keys rule.
+const kMaxPlayerVolume = 200.0;
 
 class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   static const _aspectKey = 'default_aspect';
@@ -73,12 +79,12 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       aspect: aspect,
       subtitlesEnabled: subtitles,
       skipSeconds: kSkipOptions.contains(skip) ? skip : 10,
-      volume: volume.clamp(0, 100),
+      volume: volume.clamp(0, kMaxPlayerVolume),
     );
   }
 
   void setVolume(double volume) {
-    final v = volume.clamp(0, 100).toDouble();
+    final v = volume.clamp(0, kMaxPlayerVolume).toDouble();
     StorageService.prefsBox.put(_volumeKey, v);
     state = state.copyWith(volume: v);
   }
