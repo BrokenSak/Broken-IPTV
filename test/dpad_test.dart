@@ -66,6 +66,28 @@ void main() {
     expect(taps, 0, reason: 'a hold must not also fire the tap');
   });
 
+  testWidgets('TvFocusable: a focused tile does not grow', (tester) async {
+    // Focus used to scale the tile up, which made it spill over its
+    // neighbours and overlap their captions (reported on TV).
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    const childKey = Key('tile-child');
+
+    await tester.pumpWidget(wrap(TvFocusable(
+      focusNode: node,
+      onTap: () {},
+      child: const SizedBox(key: childKey, width: 120, height: 60),
+    )));
+    await tester.pump();
+    final unfocused = tester.getRect(find.byKey(childKey));
+
+    node.requestFocus();
+    await tester.pumpAndSettle();
+
+    expect(tester.getRect(find.byKey(childKey)), unfocused,
+        reason: 'the focus ring must not resize/move the tile');
+  });
+
   testWidgets(
       'TvFocusable: OK on an inner focused button activates the button, '
       'not the tile', (tester) async {

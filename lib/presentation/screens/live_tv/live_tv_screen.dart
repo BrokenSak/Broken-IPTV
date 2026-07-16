@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui_mode.dart';
 import '../../../data/models/channel.dart';
 import '../../../data/models/epg_program.dart';
 import '../../../data/models/favorite_item.dart';
@@ -259,16 +260,18 @@ class _ChannelTile extends ConsumerWidget {
                 ],
               ),
             ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: FavoriteButton(
-                type: FavoriteType.live,
-                id: channel.streamId,
-                name: channel.name,
-                imageUrl: channel.logoUrl,
+            // No heart on TV: hold OK on the tile instead (onLongPress).
+            if (!isTvMode())
+              Positioned(
+                top: 0,
+                right: 0,
+                child: FavoriteButton(
+                  type: FavoriteType.live,
+                  id: channel.streamId,
+                  name: channel.name,
+                  imageUrl: channel.logoUrl,
+                ),
               ),
-            ),
           ],
         ),
       ),

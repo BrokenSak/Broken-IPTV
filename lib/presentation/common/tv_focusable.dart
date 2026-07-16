@@ -99,11 +99,11 @@ class _TvFocusableState extends State<TvFocusable> {
           // Focus.of registers a dependency, so this subtree rebuilds when
           // the focus state changes.
           final focused = Focus.of(context).hasPrimaryFocus;
-          final highlighted = focused || _hovered;
-          // Keep the scale small so a highlighted tile never spills past its
-          // bounds.
-          final scale = highlighted ? (_isDesktop ? 1.015 : 1.03) : 1.0;
 
+          // NB: no scaling. A focused tile used to grow, which made it spill
+          // over its neighbours and overlap their captions. The ring + glow
+          // carries the focus on its own, and the border width is constant
+          // (only the colour changes) so nothing shifts when focus moves.
           return MouseRegion(
             cursor: SystemMouseCursors.click,
             onEnter: (_) => setState(() => _hovered = true),
@@ -111,30 +111,29 @@ class _TvFocusableState extends State<TvFocusable> {
             child: GestureDetector(
               onTap: widget.onTap,
               onLongPress: widget.onLongPress,
-              child: AnimatedScale(
-                scale: scale,
+              child: AnimatedContainer(
                 duration: const Duration(milliseconds: 130),
-                curve: Curves.easeOut,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 130),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(widget.borderRadius),
-                    border: Border.all(
-                      color: highlighted ? AppColors.focusRing : Colors.transparent,
-                      width: 2,
-                    ),
-                    boxShadow: highlighted
-                        ? [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              blurRadius: 14,
-                              spreadRadius: 0,
-                            ),
-                          ]
-                        : null,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(widget.borderRadius),
+                  border: Border.all(
+                    // Focus (remote/keyboard) must be unmistakable; hover is
+                    // only a soft hint.
+                    color: focused
+                        ? AppColors.focusRing
+                        : (_hovered ? Colors.white38 : Colors.transparent),
+                    width: 3,
                   ),
-                  child: widget.child,
+                  boxShadow: focused
+                      ? [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.28),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
                 ),
+                child: widget.child,
               ),
             ),
           );

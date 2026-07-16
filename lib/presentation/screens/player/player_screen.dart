@@ -16,6 +16,7 @@ import '../../../data/models/series_item.dart';
 import '../../../data/models/watch_progress.dart';
 import '../../../state/live_providers.dart';
 import '../../common/glass_dropdown.dart';
+import '../../common/tv_focusable.dart';
 import 'player_keys.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
@@ -668,7 +669,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 duration: const Duration(milliseconds: 200),
                 child: IgnorePointer(
                   ignoring: !_controlsVisible,
-                  child: Column(
+                  // Hidden controls must not keep the focus either: otherwise a
+                  // D-pad press acts on an invisible button, and the root node
+                  // never gets the key that should reveal the menu.
+                  child: ExcludeFocus(
+                    excluding: !_controlsVisible,
+                    child: Column(
                     children: [
                       _TopBar(
                         title: _title,
@@ -717,6 +723,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         onNext: _playNextEpisode,
                       ),
                     ],
+                  ),
                   ),
                 ),
               ),
@@ -777,10 +784,13 @@ class _TopBar extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              IconButton(
-                autofocus: true,
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              // NB: no autofocus. This used to grab the focus as the player
+              // opened, so OK (with the controls up) hit Back and left the
+              // player instead of toggling the menu.
+              _PlayerButton(
+                tooltip: 'Indietro',
                 onPressed: onBack,
+                child: const Icon(Icons.arrow_back, color: Colors.white),
               ),
             const SizedBox(width: 4),
             Expanded(
@@ -846,23 +856,23 @@ class _TopBar extends ConsumerWidget {
                   ),
                 ),
               ),
-            IconButton(
+            _PlayerButton(
               tooltip: 'Impostazioni',
-              icon: const Icon(Icons.settings_outlined, color: Colors.white),
               onPressed: () => context.push('/settings'),
+              child: const Icon(Icons.settings_outlined, color: Colors.white),
             ),
             // Windows only: on Android the app is permanently fullscreen.
             if (fullscreenToggleAvailable)
               Consumer(
                 builder: (context, ref, _) {
                   final isFullscreen = ref.watch(fullscreenProvider);
-                  return IconButton(
+                  return _PlayerButton(
                     tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
-                    icon: Icon(
+                    onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
+                    child: Icon(
                       isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
                       color: Colors.white,
                     ),
-                    onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
                   );
                 },
               ),
@@ -870,6 +880,181 @@ class _TopBar extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A player control a remote can actually land on.
+///
+/// Material's own focus highlight is invisible in this app (the theme sets
+/// `highlightColor: transparent` + `NoSplash`), so on TV the focus was moving
+/// between the player buttons with nothing to show for it. Every control goes
+/// through [TvFocusable] instead, which paints the same focus ring used across
+/// the app.
+class _PlayerButton extends StatelessWidget {
+  const _PlayerButton({
+    required this.onPressed,
+    required this.child,
+    this.tooltip,
+  });
+
+  final VoidCallback onPressed;
+  final Widget child;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button = TvFocusable(
+      borderRadius: 12,
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: child,
+      ),
+    );
+    final message = tooltip;
+    if (message != null) button = Tooltip(message: message, child: button);
+    return button;
+  }
+}
+
+/// Audio-track picker. The menu is opened from the [TvFocusable] wrapper (so a
+/// remote can reach it); the inner button is kept out of the focus traversal so
+/// it isn't a second, invisible stop.
+class _AudioMenuButton extends StatefulWidget {
+  const _AudioMenuButton({
+    required this.tracks,
+    required this.currentAudioId,
+    required this.onSelected,
+  });
+
+  final List<AudioTrack> tracks;
+  final String? currentAudioId;
+  final ValueChanged<AudioTrack> onSelected;
+
+  @override
+  State<_AudioMenuButton> createState() => _AudioMenuButtonState();
+}
+
+class _AudioMenuButtonState extends State<_AudioMenuButton> {
+  final _menuKey = GlobalKey<PopupMenuButtonState<AudioTrack>>();
+
+  @override
+  Widget build(BuildContext context) {
+    return _PlayerButton(
+      tooltip: 'Lingua audio',
+      onPressed: () => _menuKey.currentState?.showButtonMenu(),
+      child: ExcludeFocus(
+        child: PopupMenuButton<AudioTrack>(
+          key: _menuKey,
+          tooltip: '',
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.multitrack_audio, color: Colors.white),
+          color: const Color(0xF01C1C1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.glassBorder),
+          ),
+          onSelected: widget.onSelected,
+          itemBuilder: (context) => [
+            for (final t in widget.tracks)
+              PopupMenuItem<AudioTrack>(
+                value: t,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check,
+                      size: 18,
+                      color: t.id == widget.currentAudioId ? Colors.white : Colors.transparent,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(_audioTrackLabel(t), style: const TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Seek bar with its own focus ring: a bare Slider takes focus from the D-pad
+/// with no visible sign, which reads as "the focus vanished". Left/Right scrub
+/// while it is focused; Up/Down move on to the buttons.
+class _SeekBar extends StatefulWidget {
+  const _SeekBar({
+    required this.position,
+    required this.duration,
+    required this.onSeek,
+    required this.formatDuration,
+  });
+
+  final Duration position;
+  final Duration duration;
+  final ValueChanged<Duration> onSeek;
+  final String Function(Duration) formatDuration;
+
+  @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  final _node = FocusNode(debugLabel: 'player.seekbar');
+
+  @override
+  void initState() {
+    super.initState();
+    _node.addListener(_onFocus);
+  }
+
+  void _onFocus() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _node.removeListener(_onFocus);
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          widget.formatDuration(widget.position),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+        Expanded(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _node.hasFocus ? AppColors.focusRing : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: Slider(
+              focusNode: _node,
+              value: widget.position.inMilliseconds
+                  .clamp(0, widget.duration.inMilliseconds)
+                  .toDouble(),
+              max: widget.duration.inMilliseconds
+                  .clamp(1, double.maxFinite.toInt())
+                  .toDouble(),
+              onChanged: (v) => widget.onSeek(Duration(milliseconds: v.round())),
+            ),
+          ),
+        ),
+        Text(
+          widget.formatDuration(widget.duration),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ],
     );
   }
 }
@@ -957,42 +1142,31 @@ class _ControlsPanel extends StatelessWidget {
           children: [
           // Live streams have no seek bar (and can't be scrubbed).
           if (!isLive)
-            Row(
-              children: [
-                Text(
-                  formatDuration(position),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: position.inMilliseconds
-                        .clamp(0, duration.inMilliseconds)
-                        .toDouble(),
-                    max: duration.inMilliseconds
-                        .clamp(1, double.maxFinite.toInt())
-                        .toDouble(),
-                    onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
-                  ),
-                ),
-                Text(
-                  formatDuration(duration),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ],
+            _SeekBar(
+              position: position,
+              duration: duration,
+              onSeek: onSeek,
+              formatDuration: formatDuration,
             ),
           Row(
             children: [
               // Live channel list opener, at the bottom-left of the controls box.
               if (onChannelList != null)
-                TextButton.icon(
-                  onPressed: onChannelList,
-                  icon: Icon(
-                    channelListOpen ? Icons.close : Icons.playlist_play,
-                    color: Colors.white,
-                    size: 22,
+                _PlayerButton(
+                  onPressed: onChannelList!,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        channelListOpen ? Icons.close : Icons.playlist_play,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('Canali',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ],
                   ),
-                  label: const Text('Canali',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 ),
               // Skip back/forward (on-demand content only).
               if (!isLive)
@@ -1003,14 +1177,14 @@ class _ControlsPanel extends StatelessWidget {
                 ),
               // Live streams can't be paused, so there's no play/pause button.
               if (!isLive)
-                IconButton(
-                  iconSize: 34,
-                  icon: Icon(
-                    playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                    color: Colors.white,
-                  ),
+                _PlayerButton(
                   tooltip: playing ? 'Pausa' : 'Play',
                   onPressed: onPlayPause,
+                  child: Icon(
+                    playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                    color: Colors.white,
+                    size: 34,
+                  ),
                 ),
               if (!isLive)
                 _SkipButton(
@@ -1022,13 +1196,13 @@ class _ControlsPanel extends StatelessWidget {
               // volume, so the in-app mute + slider only exist on desktop.
               if (showVolume) ...[
                 const SizedBox(width: 4),
-                IconButton(
-                  icon: Icon(
+                _PlayerButton(
+                  tooltip: volume > 0 ? 'Muto' : 'Riattiva audio',
+                  onPressed: onMute,
+                  child: Icon(
                     volume > 0 ? Icons.volume_up : Icons.volume_off,
                     color: Colors.white,
                   ),
-                  tooltip: volume > 0 ? 'Muto' : 'Riattiva audio',
-                  onPressed: onMute,
                 ),
                 SizedBox(
                   width: 110,
@@ -1053,7 +1227,8 @@ class _ControlsPanel extends StatelessWidget {
               const Spacer(),
               // Speed only makes sense for on-demand content, not live.
               if (!isLive)
-                TextButton(
+                _PlayerButton(
+                  tooltip: 'Velocità',
                   onPressed: onSpeed,
                   child: Text(
                     '${rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
@@ -1063,56 +1238,41 @@ class _ControlsPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-              IconButton(
-                icon: Icon(
+              _PlayerButton(
+                tooltip: 'Sottotitoli',
+                onPressed: onSubtitles,
+                child: Icon(
                   subtitlesOn ? Icons.subtitles : Icons.subtitles_off_outlined,
                   color: subtitlesOn ? Colors.white : Colors.white54,
                 ),
-                tooltip: 'Sottotitoli',
-                onPressed: onSubtitles,
               ),
               // Audio-track / language selector (only when there is a choice).
               if (audioTracks.length > 1)
-                PopupMenuButton<AudioTrack>(
-                  tooltip: 'Lingua audio',
-                  icon: const Icon(Icons.multitrack_audio, color: Colors.white),
-                  color: const Color(0xF01C1C1E),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: AppColors.glassBorder),
-                  ),
+                _AudioMenuButton(
+                  tracks: audioTracks,
+                  currentAudioId: currentAudioId,
                   onSelected: onSelectAudio,
-                  itemBuilder: (context) => [
-                    for (final t in audioTracks)
-                      PopupMenuItem<AudioTrack>(
-                        value: t,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.check,
-                              size: 18,
-                              color: t.id == currentAudioId ? Colors.white : Colors.transparent,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(_audioTrackLabel(t), style: const TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                  ],
                 ),
-              TextButton.icon(
+              _PlayerButton(
+                tooltip: 'Rapporto d\'aspetto',
                 onPressed: onAspect,
-                icon: const Icon(Icons.aspect_ratio, color: Colors.white, size: 20),
-                label: Text(
-                  aspect.label,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.aspect_ratio, color: Colors.white, size: 20),
+                    const SizedBox(width: 6),
+                    Text(
+                      aspect.label,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
               if (hasNext)
-                IconButton(
-                  icon: const Icon(Icons.skip_next, color: Colors.white, size: 30),
+                _PlayerButton(
                   tooltip: 'Prossimo episodio',
                   onPressed: onNext,
+                  child: const Icon(Icons.skip_next, color: Colors.white, size: 30),
                 ),
             ],
           ),
@@ -1134,22 +1294,19 @@ class _SkipButton extends StatelessWidget {
   Widget build(BuildContext context) {
     // Plain fast-forward/rewind glyph (no baked-in number) with the chosen
     // step written *below* it as +N / -N, so nothing overlaps the icon.
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(forward ? Icons.fast_forward : Icons.fast_rewind, color: Colors.white, size: 30),
-            const SizedBox(height: 2),
-            Text(
-              '${forward ? '+' : '-'}$seconds',
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return _PlayerButton(
+      tooltip: forward ? 'Avanti $seconds s' : 'Indietro $seconds s',
+      onPressed: onPressed,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(forward ? Icons.fast_forward : Icons.fast_rewind, color: Colors.white, size: 30),
+          const SizedBox(height: 2),
+          Text(
+            '${forward ? '+' : '-'}$seconds',
+            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }

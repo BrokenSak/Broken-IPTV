@@ -126,42 +126,38 @@ class _TvTextFormFieldState extends State<TvTextFormField> {
       );
     }
 
-    final field = TextFormField(
-      controller: widget.controller,
-      focusNode: _fieldNode,
-      decoration: widget.decoration,
-      obscureText: widget.obscureText,
-      keyboardType: widget.keyboardType,
-      textInputAction: widget.textInputAction,
-      validator: widget.validator,
-      onChanged: widget.onChanged,
-      style: widget.style,
-      // Done/Next on the TV keyboard: close the IME and resume navigation on
-      // this field (Down then moves on).
-      onEditingComplete: () => _wrapperNode.requestFocus(),
-    );
-
     return Focus(
       focusNode: _wrapperNode,
       onKeyEvent: _handleWrapperKey,
       child: Builder(
         builder: (context) {
           final navFocused = Focus.of(context).hasPrimaryFocus;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            decoration: BoxDecoration(
-              // Input fields use radius 14 (see inputDecorationTheme); +2 so
-              // the ring hugs the border without clipping its corners.
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: navFocused ? AppColors.focusRing : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: navFocused
-                  ? [BoxShadow(color: Colors.white.withValues(alpha: 0.18), blurRadius: 14)]
-                  : null,
-            ),
-            child: field,
+          // Focus is shown by recolouring the field's OWN outline, never with
+          // a ring drawn around it: the floating label ("Nome Playlist") sits
+          // in the gap of that outline and an outer ring cut straight through
+          // the text. Material leaves the gap for us, so nothing overlaps.
+          var decoration = widget.decoration ?? const InputDecoration();
+          if (navFocused) {
+            final ring = OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.focusRing, width: 2.5),
+            );
+            decoration = decoration.copyWith(enabledBorder: ring, border: ring);
+          }
+
+          return TextFormField(
+            controller: widget.controller,
+            focusNode: _fieldNode,
+            decoration: decoration,
+            obscureText: widget.obscureText,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            validator: widget.validator,
+            onChanged: widget.onChanged,
+            style: widget.style,
+            // Done/Next on the TV keyboard: close the IME and resume navigation
+            // on this field (Down then moves on).
+            onEditingComplete: () => _wrapperNode.requestFocus(),
           );
         },
       ),

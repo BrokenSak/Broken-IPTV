@@ -26,7 +26,11 @@
              320x180 artwork, not the square icon. With no banner declared the
              Firestick falls back to squeezing ic_launcher into that slot.
              Asset: res/drawable-xhdpi/tv_banner.png (+ xxhdpi for 4K sticks),
-             generated from assets/icon/app_icon.png — see HANDOFF §5. -->
+             generated from assets/icon/app_icon.png — see HANDOFF §5.
+             It is declared BOTH here and on the activity on purpose: a launcher
+             that reads ActivityInfo.banner directly (instead of loadBanner(),
+             which falls back to the application one) gets 0 when it is only set
+             here, and silently shows the square icon instead. -->
         <!-- allowBackup=false: Android Auto Backup would restore the Hive data
              (the saved playlist) on reinstall, but the Keystore key behind the
              secure-storage password is device-bound and NOT backed up, so the
@@ -42,6 +46,8 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
+            android:icon="@mipmap/ic_launcher"
+            android:banner="@drawable/tv_banner"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
