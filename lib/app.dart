@@ -3,11 +3,36 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'core/fullscreen.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
-class BrokenIptvApp extends StatelessWidget {
+class BrokenIptvApp extends StatefulWidget {
   const BrokenIptvApp({super.key});
+
+  @override
+  State<BrokenIptvApp> createState() => _BrokenIptvAppState();
+}
+
+class _BrokenIptvAppState extends State<BrokenIptvApp> {
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    // Android fullscreen is permanent: the system puts the bars back after an
+    // app switch (and sometimes after dialogs/keyboard), so re-assert it on
+    // every resume — there is no way to turn it off.
+    if (Platform.isAndroid) {
+      _lifecycle = AppLifecycleListener(onResume: () => applyAndroidImmersive());
+    }
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

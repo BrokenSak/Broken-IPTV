@@ -4,19 +4,40 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// Cross-platform fullscreen toggle: window_manager on Windows desktop,
-/// immersive system UI on Android.
+/// Whether a fullscreen toggle should be offered at all.
+///
+/// On **Android the app is permanently fullscreen** (immersive) — there is no
+/// button and no way to leave it. On Windows the toggle is real: a desktop
+/// window must stay windowed by default.
+bool get fullscreenToggleAvailable => !Platform.isAndroid;
+
+/// (Re)applies Android's permanent immersive mode. Called at startup and again
+/// on every resume: the system restores the bars after dialogs, the keyboard
+/// or an app switch, and fullscreen here must not be defeatable.
+Future<void> applyAndroidImmersive() async {
+  if (!Platform.isAndroid) return;
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+}
+
+/// Fullscreen state: window_manager on Windows desktop; on Android always on
+/// (see [applyAndroidImmersive]).
 class FullscreenController extends Notifier<bool> {
   // Whether the window was maximized before we entered fullscreen, so we can
   // restore that exact state on exit.
   bool _wasMaximized = false;
 
   @override
-  bool build() => false;
+  bool build() => Platform.isAndroid; // Android: always fullscreen.
 
   Future<void> toggle() => set(!state);
 
   Future<void> set(bool value) async {
+    if (Platform.isAndroid) {
+      // Always-on: ignore any request to leave fullscreen, just re-assert it.
+      await applyAndroidImmersive();
+      state = true;
+      return;
+    }
     if (Platform.isWindows) {
       if (value) {
         // window_manager can't transition cleanly straight from a *maximized*
@@ -40,10 +61,6 @@ class FullscreenController extends Notifier<bool> {
           _wasMaximized = false;
         }
       }
-    } else if (Platform.isAndroid) {
-      await SystemChrome.setEnabledSystemUIMode(
-        value ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
-      );
     }
     state = value;
   }

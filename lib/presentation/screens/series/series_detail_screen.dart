@@ -7,6 +7,8 @@ import '../../../core/download_support.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/download_item.dart';
 import '../../../data/models/series_item.dart';
+import '../../../data/repositories/series_repository.dart';
+import '../../../state/downloads_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/download_button.dart';
@@ -84,8 +86,12 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-              // Compact season selector — same style closed and open.
-              Row(
+              // Compact season selector — same style closed and open — with
+              // the bulk "download this season" button beside it (phone only).
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _SeasonSelector(
                     seasons: seasons,
@@ -93,6 +99,13 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
                     episodesBySeason: series.episodesBySeason,
                     onChanged: (v) => setState(() => _selectedSeason = v),
                   ),
+                  if (downloadsSupported())
+                    _SeasonDownloadButton(
+                      seriesId: widget.seriesId,
+                      seriesName: series.name,
+                      episodes: episodes,
+                      fallbackImage: series.coverUrl,
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -108,6 +121,119 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('Errore: $error')),
+      ),
+    );
+  }
+}
+
+/// Builds the download entry for one episode. Shared by the per-episode button
+/// and the whole-season one, so both produce identical keys/urls/labels.
+DownloadItem episodeDownloadTemplate({
+  required SeriesRepository repo,
+  required String seriesId,
+  required String seriesName,
+  required Episode episode,
+  required String? image,
+}) {
+  final label = '${episode.episodeNum}. ${episode.title}';
+  return DownloadItem(
+    key: DownloadItem.episodeKey(seriesId, episode.id),
+    type: DownloadType.series,
+    name: '$seriesName — $label',
+    remoteUrl: repo.episodeUrl(episode.id, episode.containerExtension),
+    containerExtension: episode.containerExtension,
+    createdAt: DateTime.now().millisecondsSinceEpoch,
+    imageUrl: image,
+    seriesId: seriesId,
+    episodeId: episode.id,
+    episodeLabel: label,
+  );
+}
+
+/// Bulk-downloads every episode of the selected season (phone only). They go
+/// through the same one-at-a-time queue as single downloads.
+class _SeasonDownloadButton extends ConsumerWidget {
+  const _SeasonDownloadButton({
+    required this.seriesId,
+    required this.seriesName,
+    required this.episodes,
+    required this.fallbackImage,
+  });
+
+  final String seriesId;
+  final String seriesName;
+  final List<Episode> episodes;
+  final String? fallbackImage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.watch(seriesRepositoryProvider).value;
+    if (repo == null || episodes.isEmpty) return const SizedBox.shrink();
+
+    final byKey = {for (final d in ref.watch(downloadsProvider)) d.key: d};
+    var done = 0;
+    var active = 0;
+    for (final e in episodes) {
+      final d = byKey[DownloadItem.episodeKey(seriesId, e.id)];
+      if (d == null) continue;
+      if (d.isCompleted) {
+        done++;
+      } else if (d.isActive) {
+        active++;
+      }
+    }
+    final total = episodes.length;
+    final allDone = done == total;
+
+    final String label;
+    final IconData icon;
+    if (allDone) {
+      label = 'Stagione scaricata';
+      icon = Icons.download_done;
+    } else if (active > 0) {
+      label = 'Scarico… $done/$total';
+      icon = Icons.downloading;
+    } else {
+      label = 'Scarica stagione';
+      icon = Icons.download_outlined;
+    }
+
+    return TvFocusable(
+      borderRadius: 14,
+      onTap: () async {
+        if (allDone) return;
+        final notifier = ref.read(downloadsProvider.notifier);
+        for (final e in episodes) {
+          await notifier.enqueue(episodeDownloadTemplate(
+            repo: repo,
+            seriesId: seriesId,
+            seriesName: seriesName,
+            episode: e,
+            image: e.imageUrl ?? fallbackImage,
+          ));
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: allDone ? Colors.white : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: allDone ? Colors.black : AppColors.textPrimary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: allDone ? Colors.black : AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -243,17 +369,12 @@ class _EpisodeTile extends ConsumerWidget {
             const SizedBox(width: 8),
             DownloadButton(
               compact: true,
-              template: DownloadItem(
-                key: DownloadItem.episodeKey(seriesId, episode.id),
-                type: DownloadType.series,
-                name: '$seriesName — $label',
-                remoteUrl: repo.episodeUrl(episode.id, episode.containerExtension),
-                containerExtension: episode.containerExtension,
-                createdAt: DateTime.now().millisecondsSinceEpoch,
-                imageUrl: image,
+              template: episodeDownloadTemplate(
+                repo: repo,
                 seriesId: seriesId,
-                episodeId: episode.id,
-                episodeLabel: label,
+                seriesName: seriesName,
+                episode: episode,
+                image: image,
               ),
             ),
           ],

@@ -16,6 +16,7 @@ import '../../../data/models/series_item.dart';
 import '../../../data/models/watch_progress.dart';
 import '../../../state/live_providers.dart';
 import '../../common/glass_dropdown.dart';
+import 'player_keys.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/watch_progress_providers.dart';
@@ -424,6 +425,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _scheduleHide();
   }
 
+  /// Plain open/close of the controls: a tap (or OK with no button focused)
+  /// opens them, the next one closes them.
+  void _toggleControls() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) {
+      _scheduleHide();
+    } else {
+      _hideTimer?.cancel();
+    }
+  }
+
+  /// Executes the decision made by [playerKeyAction].
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    switch (playerKeyAction(
+      key: event.logicalKey,
+      isKeyDown: event is KeyDownEvent,
+      controlsVisible: _controlsVisible,
+      rootHasFocus: node.hasPrimaryFocus,
+    )) {
+      case PlayerKeyAction.ignore:
+        return KeyEventResult.ignored;
+      case PlayerKeyAction.revealControls:
+        _poke();
+        return KeyEventResult.handled;
+      case PlayerKeyAction.toggleControls:
+        _toggleControls();
+        return KeyEventResult.handled;
+      case PlayerKeyAction.pokeAndPass:
+        _poke();
+        return KeyEventResult.ignored;
+    }
+  }
+
   void _togglePlayPause() {
     _player.playOrPause();
     _poke();
@@ -576,28 +610,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       backgroundColor: Colors.black,
       body: Focus(
         autofocus: true,
-        onKeyEvent: (node, event) {
-          // Controls hidden: any key only reveals them. Consuming the event
-          // matters — the buttons stay focusable while invisible, so letting
-          // it through could activate one blindly or move the focus.
-          if (!_controlsVisible) {
-            _poke();
-            return KeyEventResult.handled;
-          }
-          // Controls visible and no button focused (this root node holds the
-          // focus): OK toggles play/pause on VOD, like every TV player.
-          if (node.hasPrimaryFocus &&
-              event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
-            if (!_isLive) _togglePlayPause();
-            _poke();
-            return KeyEventResult.handled;
-          }
-          _poke();
-          return KeyEventResult.ignored;
-        },
+        onKeyEvent: _handleKey,
         child: MouseRegion(
           onHover: (_) => _poke(),
           child: Stack(
@@ -619,10 +632,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               // Opaque tap catcher above the video (media_kit's Video otherwise
               // swallows taps); it sits below the controls layer so buttons
               // still receive their taps when the controls are visible.
+              // Tap = open the controls, tap again = close them.
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _poke,
+                  onTap: _toggleControls,
                 ),
               ),
               // Buffering / auto-reconnect indicator.
@@ -837,19 +851,21 @@ class _TopBar extends ConsumerWidget {
               icon: const Icon(Icons.settings_outlined, color: Colors.white),
               onPressed: () => context.push('/settings'),
             ),
-            Consumer(
-              builder: (context, ref, _) {
-                final isFullscreen = ref.watch(fullscreenProvider);
-                return IconButton(
-                  tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
-                  icon: Icon(
-                    isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                    color: Colors.white,
-                  ),
-                  onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
-                );
-              },
-            ),
+            // Windows only: on Android the app is permanently fullscreen.
+            if (fullscreenToggleAvailable)
+              Consumer(
+                builder: (context, ref, _) {
+                  final isFullscreen = ref.watch(fullscreenProvider);
+                  return IconButton(
+                    tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
+                    icon: Icon(
+                      isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                      color: Colors.white,
+                    ),
+                    onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
+                  );
+                },
+              ),
           ],
           ),
         ),

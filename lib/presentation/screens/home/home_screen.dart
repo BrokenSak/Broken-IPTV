@@ -73,11 +73,13 @@ class HomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.download_outlined),
               onPressed: () => context.push('/downloads'),
             ),
-          IconButton(
-            tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
-            icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-            onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
-          ),
+          // Windows only: on Android the app is permanently fullscreen.
+          if (fullscreenToggleAvailable)
+            IconButton(
+              tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
+              icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+              onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
+            ),
           IconButton(
             tooltip: 'Impostazioni',
             icon: const Icon(Icons.settings_outlined),
