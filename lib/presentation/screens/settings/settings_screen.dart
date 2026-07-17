@@ -234,6 +234,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ],
           ),
+          const SizedBox(height: 12),
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.fast_forward),
+            title: Text('Salta sigla', style: _kItemTitle),
+            subtitle: Text(
+              'Durata della sigla: il pulsante nel player salta a questo punto '
+              '(solo serie). I pannelli non indicano dove finisce la sigla.',
+              style: _kItemDesc,
+            ),
+          ),
+          Row(
+            children: [
+              for (final s in kIntroSkipOptions) ...[
+                Expanded(
+                  child: TvFocusable(
+                    borderRadius: 14,
+                    onTap: () => ref.read(playerSettingsProvider.notifier).setIntroSkipSeconds(s),
+                    child: _ModeChip(
+                      label: '$s s',
+                      selected: ref.watch(playerSettingsProvider).introSkipSeconds == s,
+                    ),
+                  ),
+                ),
+                if (s != kIntroSkipOptions.last) const SizedBox(width: 12),
+              ],
+            ],
+          ),
           const SizedBox(height: 24),
           const Text('Rete', style: _kSectionTitle),
           const SizedBox(height: 8),

@@ -123,7 +123,7 @@ Widget _posterGrid(List<SeriesItem> items) {
       childAspectRatio: GridMetrics.posterRatio,
     ),
     itemCount: items.length,
-    itemBuilder: (context, index) => _SeriesPoster(item: items[index], autofocus: index == 0),
+    itemBuilder: (context, index) => _SeriesPoster(item: items[index]),
   );
 }
 
@@ -154,7 +154,6 @@ class _SeriesContinue extends ConsumerWidget {
       itemBuilder: (context, index) {
         final p = items[index];
         return TvFocusable(
-          autofocus: index == 0,
           // Android/TV: long-press opens the add-to-favorites / remove sheet.
           // Windows: disabled (null) — the × button removes instead.
           onLongPress: longPressContinueOptions(
@@ -376,15 +375,13 @@ class _SeriesGrid extends ConsumerWidget {
 }
 
 class _SeriesPoster extends ConsumerWidget {
-  const _SeriesPoster({required this.item, this.autofocus = false});
+  const _SeriesPoster({required this.item});
 
   final SeriesItem item;
-  final bool autofocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return TvFocusable(
-      autofocus: autofocus,
       onLongPress: longPressFavorite(
         ref,
         FavoriteItem(type: FavoriteType.series, id: item.seriesId, name: item.name, imageUrl: item.coverUrl),

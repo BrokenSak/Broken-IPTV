@@ -123,7 +123,7 @@ Widget _posterGrid(List<VodItem> items) {
       childAspectRatio: GridMetrics.posterRatio,
     ),
     itemCount: items.length,
-    itemBuilder: (context, index) => _VodPoster(item: items[index], autofocus: index == 0),
+    itemBuilder: (context, index) => _VodPoster(item: items[index]),
   );
 }
 
@@ -154,7 +154,6 @@ class _VodContinue extends ConsumerWidget {
       itemBuilder: (context, index) {
         final p = items[index];
         return TvFocusable(
-          autofocus: index == 0,
           // Android/TV: long-press opens the add-to-favorites / remove sheet.
           // Windows: disabled (null) — the × button removes instead.
           onLongPress: longPressContinueOptions(
@@ -366,15 +365,13 @@ class _VodGrid extends ConsumerWidget {
 }
 
 class _VodPoster extends ConsumerWidget {
-  const _VodPoster({required this.item, this.autofocus = false});
+  const _VodPoster({required this.item});
 
   final VodItem item;
-  final bool autofocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return TvFocusable(
-      autofocus: autofocus,
       onLongPress: longPressFavorite(
         ref,
         FavoriteItem(type: FavoriteType.vod, id: item.streamId, name: item.name, imageUrl: item.posterUrl),

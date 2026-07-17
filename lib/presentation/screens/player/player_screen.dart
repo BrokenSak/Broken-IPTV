@@ -19,6 +19,7 @@ import '../../../core/ui_mode.dart';
 import '../../common/glass_dropdown.dart';
 import '../../common/tv_focusable.dart';
 import 'player_keys.dart';
+import 'series_prompts.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/watch_progress_providers.dart';
@@ -130,6 +131,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// The control the D-pad lands on when the menu opens (play/pause, or the
   /// channel list button on live, which has no play/pause).
   final FocusNode _primaryControlNode = FocusNode(debugLabel: 'player.primary');
+
+  /// "Salta sigla" / "Prossimo episodio". Focused on TV as soon as it appears
+  /// (with the controls down), so OK presses it.
+  final FocusNode _floatingActionNode = FocusNode(debugLabel: 'player.floating');
+  bool _floatingFocusRequested = false;
+
+  /// How close to the end the credits button appears.
+  static const _creditsWindow = Duration(seconds: 90);
 
   // Audio tracks (multi-language). We try to auto-select Italian per media.
   List<AudioTrack> _audioTracks = const [];
@@ -392,6 +401,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hideTimer?.cancel();
     _retryTimer?.cancel();
     _primaryControlNode.dispose();
+    _floatingActionNode.dispose();
     for (final s in _subscriptions) {
       s.cancel();
     }
@@ -612,9 +622,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  /// Jumps to the end of the intro. There are no chapter markers from a panel,
+  /// so this is the configured mark measured from the start of the episode.
+  void _skipIntro(Duration introEnd) {
+    _player.seek(introEnd);
+    _hideControls();
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasNext = _isSeries && _findNextEpisode() != null;
+
+    // Series-only floating shortcuts: "Salta sigla" early on, "Prossimo
+    // episodio" over the end credits (see seriesPromptFor).
+    final introEnd = Duration(seconds: ref.watch(playerSettingsProvider).introSkipSeconds);
+    final prompt = seriesPromptFor(
+      isSeries: _isSeries,
+      isLive: _isLive,
+      hasNextEpisode: hasNext,
+      position: _position,
+      duration: _duration,
+      introEnd: introEnd,
+      creditsWindow: _creditsWindow,
+    );
+    final showFloating = prompt != SeriesPrompt.none;
+
+    // On TV, put the ring on it as soon as it shows (only while the menu is
+    // down, so it never steals focus from controls being navigated).
+    if (isTvMode()) {
+      if (showFloating && !_floatingFocusRequested && !_controlsVisible) {
+        _floatingFocusRequested = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_controlsVisible) _floatingActionNode.requestFocus();
+        });
+      } else if (!showFloating) {
+        _floatingFocusRequested = false;
+      }
+    }
 
     return PopScope(
       // Back (TV remote / Android) peels one layer at a time: channel overlay,
@@ -750,6 +794,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                 ),
               ),
+              // Series shortcuts, above the controls layer and outside its
+              // ExcludeFocus: they must stay usable with the menu down.
+              if (showFloating)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  right: 20,
+                  // Sit clear of the controls box when it is up.
+                  bottom: _controlsVisible ? 150 : 40,
+                  child: _FloatingAction(
+                    focusNode: _floatingActionNode,
+                    icon: prompt == SeriesPrompt.nextEpisode
+                        ? Icons.skip_next
+                        : Icons.fast_forward,
+                    label: prompt == SeriesPrompt.nextEpisode
+                        ? 'Prossimo episodio'
+                        : 'Salta sigla',
+                    onPressed: prompt == SeriesPrompt.nextEpisode
+                        ? _playNextEpisode
+                        : () => _skipIntro(introEnd),
+                  ),
+                ),
               // Live channel list overlay (zap without leaving the player).
               if (_channelListOpen)
                 _ChannelListOverlay(
@@ -901,6 +967,54 @@ class _TopBar extends ConsumerWidget {
               ),
           ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating action over the video ("Salta sigla" / "Prossimo episodio").
+///
+/// Deliberately shown even while the controls are hidden — that is the whole
+/// point. It sits on its own in the Stack (outside the controls' ExcludeFocus)
+/// so a remote can focus it: its own key handler then takes OK before the
+/// player's root node sees it.
+class _FloatingAction extends StatelessWidget {
+  const _FloatingAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.focusNode,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final FocusNode focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocusable(
+      borderRadius: 14,
+      focusNode: focusNode,
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        decoration: BoxDecoration(
+          // Solid white so it reads over any frame of video.
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.black, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       ),
     );

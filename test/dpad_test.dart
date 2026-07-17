@@ -9,12 +9,12 @@ import 'package:broken_iptv/presentation/common/tv_text_field.dart';
 /// TV behavior is forced through the debug overrides.
 void main() {
   setUp(() {
-    TvFocusable.debugIsDesktopOverride = false; // behave like Android TV
+    TvFocusable.debugDpadOverride = true; // behave like Android TV
     TvTextFormField.debugTvModeOverride = true;
   });
 
   tearDown(() {
-    TvFocusable.debugIsDesktopOverride = null;
+    TvFocusable.debugDpadOverride = null;
     TvTextFormField.debugTvModeOverride = null;
   });
 
@@ -64,6 +64,28 @@ void main() {
 
     expect(longPresses, 1, reason: 'one long-press per hold');
     expect(taps, 0, reason: 'a hold must not also fire the tap');
+  });
+
+  testWidgets('TvFocusable: outside TV mode a tile never takes focus', (tester) async {
+    // On a phone the first tile of every grid used to autofocus and light up on
+    // its own ("buttons lit that I never clicked"): there is no D-pad there, so
+    // the node must not be focusable at all.
+    TvFocusable.debugDpadOverride = false; // phone / desktop
+    final node = FocusNode();
+    addTearDown(node.dispose);
+
+    await tester.pumpWidget(wrap(TvFocusable(
+      focusNode: node,
+      autofocus: true,
+      onTap: () {},
+      child: const SizedBox(width: 100, height: 40),
+    )));
+    await tester.pumpAndSettle();
+    expect(node.hasFocus, isFalse, reason: 'autofocus must be ignored off-TV');
+
+    node.requestFocus();
+    await tester.pumpAndSettle();
+    expect(node.hasFocus, isFalse, reason: 'the node must not be focusable at all');
   });
 
   testWidgets('TvFocusable: a focused tile does not grow', (tester) async {

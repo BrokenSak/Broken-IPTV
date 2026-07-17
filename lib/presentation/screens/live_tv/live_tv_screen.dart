@@ -138,7 +138,6 @@ class _LiveFavorites extends ConsumerWidget {
         final f = favs[index];
         return _ChannelTile(
           channel: Channel(streamId: f.id, name: f.name, categoryId: '', logoUrl: f.imageUrl),
-          autofocus: index == 0,
         );
       },
     );
@@ -189,7 +188,7 @@ class _ChannelGrid extends ConsumerWidget {
           itemCount: list.length,
           itemBuilder: (context, index) {
             final channel = list[index];
-            return _ChannelTile(channel: channel, autofocus: index == 0);
+            return _ChannelTile(channel: channel);
           },
         );
       },
@@ -200,15 +199,13 @@ class _ChannelGrid extends ConsumerWidget {
 }
 
 class _ChannelTile extends ConsumerWidget {
-  const _ChannelTile({required this.channel, this.autofocus = false});
+  const _ChannelTile({required this.channel});
 
   final Channel channel;
-  final bool autofocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return TvFocusable(
-      autofocus: autofocus,
       onLongPress: longPressFavorite(
         ref,
         FavoriteItem(
