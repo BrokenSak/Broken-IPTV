@@ -267,6 +267,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _error = 'Nessuno stream da riprodurre.';
     }
     _scheduleHide();
+
+    // TV: the controls start visible, but the root Focus (autofocus) would
+    // hold the focus with nothing highlighted and OK doing nothing until you
+    // press an arrow. Land the focus on the main control right away, so the
+    // ring shows and OK works from the first press.
+    if (isTvMode()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Focus the main control (play/pause, or "Canali" on live). The
+        // "Ricomincia"/"Prossimo episodio" floating shortcut, when shown, is a
+        // step away with an arrow, or takes the focus itself once the controls
+        // auto-hide.
+        if (mounted && _controlsVisible) _primaryControlNode.requestFocus();
+      });
+    }
   }
 
   /// Shows the "Ricomincia da capo" shortcut, auto-hiding after 6s.
@@ -659,15 +673,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final showRestart = _showRestart && !showNext;
     final showFloating = showNext || showRestart;
 
-    // On TV, put the ring on it as soon as it shows (only while the menu is
-    // down, so it never steals focus from controls being navigated).
+    // On TV, auto-focus ONLY "Prossimo episodio" (so it's a one-press action
+    // at the end). NOT "Ricomincia": auto-focusing it would mean that when the
+    // controls hide after 5s, a stray OK restarts the video by mistake. The
+    // Ricomincia chip is still reachable with an arrow / tap.
     if (isTvMode()) {
-      if (showFloating && !_floatingFocusRequested && !_controlsVisible) {
+      if (showNext && !_floatingFocusRequested && !_controlsVisible) {
         _floatingFocusRequested = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && !_controlsVisible) _floatingActionNode.requestFocus();
         });
-      } else if (!showFloating) {
+      } else if (!showNext) {
         _floatingFocusRequested = false;
       }
     }
