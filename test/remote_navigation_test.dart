@@ -257,11 +257,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // Arrival: "Aggiungi playlist" is the autofocused starting point (no
-    // playlists saved in this harness). Down: the aspect chip row. Three
-    // rights clamp on the last chip ("4:3") wherever Down landed in the row.
+    // playlists saved in this harness). Down: the aspect chip row (Originale /
+    // Riempi). A couple of rights clamp on the last chip ("Riempi").
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
     }
@@ -269,7 +269,7 @@ void main() {
 
     final context = tester.element(find.byType(SettingsScreen));
     final container = ProviderScope.containerOf(context, listen: false);
-    expect(container.read(playerSettingsProvider).aspect, VideoAspect.ratio43,
+    expect(container.read(playerSettingsProvider).aspect, VideoAspect.fill,
         reason: 'OK on the focused chip must apply the setting');
   });
 }

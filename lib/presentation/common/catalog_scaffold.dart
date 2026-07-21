@@ -168,10 +168,18 @@ class _CategorySidebarState extends State<CategorySidebar> {
       first = false;
       rows.add(TvFocusable(
         autofocus: autofocus,
-        borderRadius: 12,
+        borderRadius: 14,
         onTap: onTapOverride ?? () => widget.onSelect(id),
         child: Container(
-          color: selected ? AppColors.surfaceElevated : Colors.transparent,
+          // Selected = rounded dark box with a white outline, matching the
+          // app's rounded style (not a bare rectangle). A small vertical margin
+          // keeps consecutive rounded boxes from touching.
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.surfaceElevated : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: selected ? Border.all(color: Colors.white, width: 1.5) : null,
+          ),
           padding: EdgeInsets.fromLTRB(indent ? 30 : 16, 14, 16, 14),
           child: Row(
             children: [

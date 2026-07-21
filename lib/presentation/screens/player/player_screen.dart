@@ -115,7 +115,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   double _volumeBeforeMute = 100;
   double _rate = 1.0;
   bool _subtitlesOn = false;
-  late VideoAspect _aspect;
 
   // Playback resilience: auto-reconnect with a ts↔m3u8 fallback for live.
   int _retry = 0;
@@ -169,7 +168,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ]));
     }
     final settings = ref.read(playerSettingsProvider);
-    _aspect = settings.aspect;
     _subtitlesOn = settings.subtitlesEnabled;
     // On Android the volume is the system one, driven by the phone/remote
     // hardware keys: keep the software volume at 100 (a remembered low/zero
@@ -526,10 +524,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  void _cycleAspect() {
-    final next = VideoAspect
-        .values[(VideoAspect.values.indexOf(_aspect) + 1) % VideoAspect.values.length];
-    setState(() => _aspect = next);
+  /// Toggle Originale ↔ Riempi and persist it, so the choice is remembered
+  /// (whether changed here or from Settings). The video reads the provider.
+  void _toggleAspect() {
+    final current = ref.read(playerSettingsProvider).aspect;
+    final next =
+        current == VideoAspect.fill ? VideoAspect.original : VideoAspect.fill;
+    ref.read(playerSettingsProvider.notifier).setAspect(next);
     _poke();
   }
 
@@ -596,56 +597,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
-  Widget _buildVideo() {
-    switch (_aspect) {
-      case VideoAspect.auto:
+  Widget _buildVideo(VideoAspect aspect) {
+    switch (aspect) {
+      case VideoAspect.original:
+        // Keep the source aspect: letterbox where the video and screen shapes
+        // differ, no distortion.
         return Video(controller: _controller, fit: BoxFit.contain, controls: NoVideoControls);
       case VideoAspect.fill:
-        // "Riempi" = stretch to the screen in BOTH directions: the whole frame
-        // stays visible (nothing cropped like BoxFit.cover) and there are no
-        // black bars — at the cost of distorting the aspect ratio.
+        // "Riempi" = stretch to the screen in BOTH directions so it fills
+        // edge to edge (no bars from a shape mismatch), at the cost of some
+        // distortion.
         return Video(controller: _controller, fit: BoxFit.fill, controls: NoVideoControls);
-      case VideoAspect.ratio169:
-        return Center(
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Video(controller: _controller, fit: BoxFit.fill, controls: NoVideoControls),
-          ),
-        );
-      case VideoAspect.ratio43:
-        return Center(
-          child: AspectRatio(
-            aspectRatio: 4 / 3,
-            child: Video(controller: _controller, fit: BoxFit.fill, controls: NoVideoControls),
-          ),
-        );
     }
-  }
-
-  /// Jumps to the end of the intro. There are no chapter markers from a panel,
-  /// so this is the configured mark measured from the start of the episode.
-  void _skipIntro(Duration introEnd) {
-    _player.seek(introEnd);
-    _hideControls();
   }
 
   @override
   Widget build(BuildContext context) {
     final hasNext = _isSeries && _findNextEpisode() != null;
+    final aspect = ref.watch(playerSettingsProvider).aspect;
 
-    // Series-only floating shortcuts: "Salta sigla" early on, "Prossimo
-    // episodio" over the end credits (see seriesPromptFor).
-    final introEnd = Duration(seconds: ref.watch(playerSettingsProvider).introSkipSeconds);
-    final prompt = seriesPromptFor(
+    // "Prossimo episodio" floats over the end credits (see series_prompts).
+    // NB: the automatic "Salta sigla" was removed — a panel gives no chapter
+    // markers and intros shift per episode, so any guess was wrong.
+    final showNext = shouldShowNextEpisode(
       isSeries: _isSeries,
       isLive: _isLive,
       hasNextEpisode: hasNext,
       position: _position,
       duration: _duration,
-      introEnd: introEnd,
       creditsWindow: _creditsWindow,
     );
-    final showFloating = prompt != SeriesPrompt.none;
+    final showFloating = showNext;
 
     // On TV, put the ring on it as soon as it shows (only while the menu is
     // down, so it never steals focus from controls being navigated).
@@ -694,7 +676,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           ),
                         ),
                       )
-                    : _buildVideo(),
+                    : _buildVideo(aspect),
               ),
               // Opaque tap catcher above the video (media_kit's Video otherwise
               // swallows taps); it sits below the controls layer so buttons
@@ -767,7 +749,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         volume: _volume,
                         rate: _rate,
                         subtitlesOn: _subtitlesOn,
-                        aspect: _aspect,
+                        aspect: aspect,
                         hasNext: hasNext,
                         skipSeconds: ref.watch(playerSettingsProvider).skipSeconds,
                         formatDuration: _formatDuration,
@@ -785,7 +767,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         },
                         onMute: _toggleMute,
                         onSubtitles: _toggleSubtitles,
-                        onAspect: _cycleAspect,
+                        onAspect: _toggleAspect,
                         onSpeed: _cycleSpeed,
                         onNext: _playNextEpisode,
                       ),
@@ -805,15 +787,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   bottom: _controlsVisible ? 150 : 40,
                   child: _FloatingAction(
                     focusNode: _floatingActionNode,
-                    icon: prompt == SeriesPrompt.nextEpisode
-                        ? Icons.skip_next
-                        : Icons.fast_forward,
-                    label: prompt == SeriesPrompt.nextEpisode
-                        ? 'Prossimo episodio'
-                        : 'Salta sigla',
-                    onPressed: prompt == SeriesPrompt.nextEpisode
-                        ? _playNextEpisode
-                        : () => _skipIntro(introEnd),
+                    icon: Icons.skip_next,
+                    label: 'Prossimo episodio',
+                    onPressed: _playNextEpisode,
                   ),
                 ),
               // Live channel list overlay (zap without leaving the player).
@@ -1043,18 +1019,22 @@ class _PlayerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget button = TvFocusable(
-      borderRadius: 12,
-      focusNode: focusNode,
-      onTap: onPressed,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: child,
+    // [tooltip] is only an accessibility label via Semantics — NO visual
+    // tooltip box. The pop-up "explanation" boxes on hover/touch/focus were
+    // ugly on the player (user request), so they are gone.
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: TvFocusable(
+        borderRadius: 12,
+        focusNode: focusNode,
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: child,
+        ),
       ),
     );
-    final message = tooltip;
-    if (message != null) button = Tooltip(message: message, child: button);
-    return button;
   }
 }
 
