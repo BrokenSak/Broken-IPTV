@@ -131,13 +131,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// channel list button on live, which has no play/pause).
   final FocusNode _primaryControlNode = FocusNode(debugLabel: 'player.primary');
 
-  /// "Salta sigla" / "Prossimo episodio". Focused on TV as soon as it appears
-  /// (with the controls down), so OK presses it.
+  /// The floating shortcut ("Prossimo episodio" / "Ricomincia da capo").
+  /// Focused on TV as soon as it appears (with the controls down), so OK
+  /// presses it.
   final FocusNode _floatingActionNode = FocusNode(debugLabel: 'player.floating');
   bool _floatingFocusRequested = false;
 
   /// How close to the end the credits button appears.
   static const _creditsWindow = Duration(seconds: 90);
+
+  /// "Ricomincia da capo": flashed for a few seconds right after a resume, so
+  /// you can start over instead of continuing (playback resumes on its own).
+  bool _showRestart = false;
+  Timer? _restartTimer;
 
   // Audio tracks (multi-language). We try to auto-select Italian per media.
   List<AudioTrack> _audioTracks = const [];
@@ -223,12 +229,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }),
       _player.stream.duration.listen((duration) {
         if (mounted) setState(() => _duration = duration);
-        // Seek to the saved resume point once the media is ready.
+        // Seek to the saved resume point once the media is ready, then flash
+        // the "Ricomincia da capo" shortcut for a few seconds.
         if (_pendingResumeMs != null && duration.inMilliseconds > 0) {
           final target = _pendingResumeMs!;
           _pendingResumeMs = null;
           if (target < duration.inMilliseconds - 5000) {
             _player.seek(Duration(milliseconds: target));
+            _flashRestart();
           }
         }
       }),
@@ -261,12 +269,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _scheduleHide();
   }
 
+  /// Shows the "Ricomincia da capo" shortcut, auto-hiding after 6s.
+  void _flashRestart() {
+    _restartTimer?.cancel();
+    if (mounted) setState(() => _showRestart = true);
+    _restartTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _showRestart = false);
+    });
+  }
+
+  void _restartFromStart() {
+    _restartTimer?.cancel();
+    if (mounted) setState(() => _showRestart = false);
+    _player.seek(Duration.zero);
+  }
+
   void _open(String url) {
     _currentUrl = url;
     _autoAudioApplied = false;
+    _restartTimer?.cancel();
     setState(() {
       _error = null;
       _buffering = true;
+      _showRestart = false;
     });
     _player.open(Media(url));
     _player.setRate(_rate);
@@ -398,6 +423,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (_) {}
     _hideTimer?.cancel();
     _retryTimer?.cancel();
+    _restartTimer?.cancel();
     _primaryControlNode.dispose();
     _floatingActionNode.dispose();
     for (final s in _subscriptions) {
@@ -619,6 +645,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // "Prossimo episodio" floats over the end credits (see series_prompts).
     // NB: the automatic "Salta sigla" was removed — a panel gives no chapter
     // markers and intros shift per episode, so any guess was wrong.
+    // Two floating shortcuts (bottom-right, over the video, independent of the
+    // controls bar): "Prossimo episodio" near the end, "Ricomincia da capo"
+    // just after a resume. They can't coincide (end vs start); next wins.
     final showNext = shouldShowNextEpisode(
       isSeries: _isSeries,
       isLive: _isLive,
@@ -627,7 +656,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       duration: _duration,
       creditsWindow: _creditsWindow,
     );
-    final showFloating = showNext;
+    final showRestart = _showRestart && !showNext;
+    final showFloating = showNext || showRestart;
 
     // On TV, put the ring on it as soon as it shows (only while the menu is
     // down, so it never steals focus from controls being navigated).
@@ -660,9 +690,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       body: Focus(
         autofocus: true,
         onKeyEvent: _handleKey,
-        child: MouseRegion(
-          onHover: (_) => _poke(),
-          child: Stack(
+        // NB: no MouseRegion onHover. The controls used to pop up on every
+        // mouse move, which made the floating shortcuts pointless. They now
+        // open only on an explicit action — tap, click, or OK (see _handleKey
+        // and the tap catcher) — and close on tap again or after 5s idle.
+        child: Stack(
             children: [
               Positioned.fill(
                 child: _error != null
@@ -750,7 +782,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         rate: _rate,
                         subtitlesOn: _subtitlesOn,
                         aspect: aspect,
-                        hasNext: hasNext,
                         skipSeconds: ref.watch(playerSettingsProvider).skipSeconds,
                         formatDuration: _formatDuration,
                         onSkipBack: () => _skip(-ref.read(playerSettingsProvider).skipSeconds),
@@ -769,14 +800,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         onSubtitles: _toggleSubtitles,
                         onAspect: _toggleAspect,
                         onSpeed: _cycleSpeed,
-                        onNext: _playNextEpisode,
                       ),
                     ],
                   ),
                   ),
                 ),
               ),
-              // Series shortcuts, above the controls layer and outside its
+              // Floating shortcuts, above the controls layer and outside its
               // ExcludeFocus: they must stay usable with the menu down.
               if (showFloating)
                 AnimatedPositioned(
@@ -787,9 +817,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   bottom: _controlsVisible ? 150 : 40,
                   child: _FloatingAction(
                     focusNode: _floatingActionNode,
-                    icon: Icons.skip_next,
-                    label: 'Prossimo episodio',
-                    onPressed: _playNextEpisode,
+                    icon: showNext ? Icons.skip_next : Icons.replay,
+                    label: showNext ? 'Prossimo episodio' : 'Ricomincia da capo',
+                    onPressed: showNext ? _playNextEpisode : _restartFromStart,
                   ),
                 ),
               // Live channel list overlay (zap without leaving the player).
@@ -801,7 +831,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
             ],
           ),
-        ),
       ),
       ),
     );
@@ -1193,7 +1222,6 @@ class _ControlsPanel extends StatelessWidget {
     required this.rate,
     required this.subtitlesOn,
     required this.aspect,
-    required this.hasNext,
     required this.skipSeconds,
     required this.formatDuration,
     required this.onSkipBack,
@@ -1205,7 +1233,6 @@ class _ControlsPanel extends StatelessWidget {
     required this.onSubtitles,
     required this.onAspect,
     required this.onSpeed,
-    required this.onNext,
     required this.channelListOpen,
     required this.onChannelList,
     required this.audioTracks,
@@ -1226,7 +1253,6 @@ class _ControlsPanel extends StatelessWidget {
   final double rate;
   final bool subtitlesOn;
   final VideoAspect aspect;
-  final bool hasNext;
   final int skipSeconds;
   final String Function(Duration) formatDuration;
   final VoidCallback onSkipBack;
@@ -1238,7 +1264,6 @@ class _ControlsPanel extends StatelessWidget {
   final VoidCallback onSubtitles;
   final VoidCallback onAspect;
   final VoidCallback onSpeed;
-  final VoidCallback onNext;
 
   /// Live channel list (only for live). Null hides the "Canali" button.
   final bool channelListOpen;
@@ -1399,12 +1424,8 @@ class _ControlsPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasNext)
-                _PlayerButton(
-                  tooltip: 'Prossimo episodio',
-                  onPressed: onNext,
-                  child: const Icon(Icons.skip_next, color: Colors.white, size: 30),
-                ),
+              // "Prossimo episodio" is NOT here: it lives only as the floating
+              // shortcut over the video (user request — it was a duplicate).
             ],
           ),
           ],
