@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../core/fullscreen.dart';
+import '../../../core/playback_activity.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/channel.dart';
 import '../../../data/models/series_item.dart';
@@ -165,6 +166,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    // Tells the cross-device sync to keep off the network while a stream is
+    // playing (see PlaybackActivity). Cleared in dispose().
+    PlaybackActivity.active = true;
     // Only the player is landscape-only on Android: the rest of the app
     // rotates freely. Restored in dispose().
     if (Platform.isAndroid) {
@@ -420,6 +424,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    PlaybackActivity.active = false;
     // Leaving the player: give rotation back to the system (empty list =
     // platform default, i.e. free rotation).
     if (Platform.isAndroid) {

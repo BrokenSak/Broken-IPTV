@@ -10,6 +10,7 @@ class StorageService {
   static const credentialsBoxName = 'credentials';
   static const catalogCacheBoxName = 'catalog_cache';
   static const downloadsBoxName = 'downloads';
+  static const tombstonesBoxName = 'sync_tombstones';
 
   static late Box<Map> profilesBox;
   static late Box prefsBox;
@@ -23,6 +24,11 @@ class StorageService {
   /// Raw catalog responses (see CatalogCache). Lazy: payloads can be several
   /// MB per profile, so they are read from disk on demand, never kept in RAM.
   static late LazyBox<Map> catalogCacheBox;
+
+  /// When a favourite or a "continua a guardare" entry was deleted, keyed
+  /// `fav:<key>` / `prog:<key>` → epoch ms. Without these a removal would be
+  /// undone by the first device that still has the item (see [SyncTombstones]).
+  static late Box<int> tombstonesBox;
 
   /// Reliable local store for profile passwords (obfuscated). Kept in Hive
   /// because flutter_secure_storage has proven unreliable across platforms for
@@ -46,5 +52,6 @@ class StorageService {
     credentialsBox = await Hive.openBox<String>(credentialsBoxName);
     catalogCacheBox = await Hive.openLazyBox<Map>(catalogCacheBoxName);
     downloadsBox = await Hive.openBox<Map>(downloadsBoxName);
+    tombstonesBox = await Hive.openBox<int>(tombstonesBoxName);
   }
 }

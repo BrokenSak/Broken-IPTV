@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app.dart';
 import 'core/fullscreen.dart';
 import 'data/services/storage_service.dart';
+import 'state/sync_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,11 @@ void main() async {
   // Orientation is free everywhere on Android (portrait + landscape); only
   // the player pins landscape, see PlayerScreen.initState/dispose.
 
+  // Owned here rather than by a plain ProviderScope so the Windows close hook
+  // below can reach the providers (a window closing isn't a widget lifecycle
+  // event, and by the time it fires there is no context left to read from).
+  final container = ProviderContainer();
+
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
     const options = WindowOptions(
@@ -32,7 +38,41 @@ void main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+    // Closing the window is the desktop equivalent of Android's "app went to
+    // background": the last chance to push pending favourites/progress.
+    await windowManager.setPreventClose(true);
+    windowManager.addListener(_SyncOnWindowClose(container));
   }
 
-  runApp(const ProviderScope(child: BrokenIptvApp()));
+  runApp(UncontrolledProviderScope(
+    container: container,
+    child: const BrokenIptvApp(),
+  ));
+}
+
+/// Uploads pending sync changes when the user closes the window, then really
+/// closes it.
+///
+/// ⚠️ `setPreventClose(true)` means the window ONLY closes when
+/// [WindowManager.destroy] is called — so every path through here must reach
+/// it. Hence the timeout and the bare catch: a slow or broken backend can
+/// delay the close by a few seconds at most, never block it.
+class _SyncOnWindowClose with WindowListener {
+  _SyncOnWindowClose(this._container);
+
+  final ProviderContainer _container;
+  bool _closing = false;
+
+  @override
+  void onWindowClose() async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      await _container
+          .read(syncProvider.notifier)
+          .syncIfChanged()
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    await windowManager.destroy();
+  }
 }

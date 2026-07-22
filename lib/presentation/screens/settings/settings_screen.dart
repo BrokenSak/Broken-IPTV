@@ -12,15 +12,18 @@ import '../../../data/services/content_source.dart';
 import '../../../data/services/device_mode_service.dart';
 import '../../../data/services/speed_test_service.dart';
 import '../../../data/services/storage_service.dart';
+import '../../../data/services/sync_merge.dart';
 import '../../../state/favorites_providers.dart';
 import '../../../state/live_providers.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/profile_providers.dart';
 import '../../../state/series_providers.dart';
+import '../../../state/sync_providers.dart';
 import '../../../state/vod_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/app_dialogs.dart';
 import '../../common/tv_focusable.dart';
+import '../../common/tv_text_field.dart';
 
 // Shared text styles for settings: **bold** titles, *italic* descriptions.
 const _kSectionTitle = TextStyle(
@@ -240,6 +243,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          const Text('Sincronizzazione', style: _kSectionTitle),
+          const SizedBox(height: 8),
+          const _SyncSection(),
+          const SizedBox(height: 24),
           const Text('Rete', style: _kSectionTitle),
           const SizedBox(height: 8),
           const _SpeedTestTile(),
@@ -408,6 +415,174 @@ class _AccountSection extends ConsumerWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
         );
       },
+    );
+  }
+}
+
+/// "Sincronizzazione": preferiti e "Continua a guardare" uguali su ogni
+/// dispositivo. No accounts — whoever holds the code sees the data, which the
+/// warning at the bottom says out loud.
+class _SyncSection extends ConsumerStatefulWidget {
+  const _SyncSection();
+
+  @override
+  ConsumerState<_SyncSection> createState() => _SyncSectionState();
+}
+
+class _SyncSectionState extends ConsumerState<_SyncSection> {
+  late final TextEditingController _endpointCtrl;
+  late final TextEditingController _codeCtrl;
+  String? _codeError;
+
+  @override
+  void initState() {
+    super.initState();
+    final sync = ref.read(syncProvider);
+    _endpointCtrl = TextEditingController(text: sync.endpoint);
+    _codeCtrl = TextEditingController(
+      text: sync.code == null ? '' : formatSyncCode(sync.code!),
+    );
+  }
+
+  @override
+  void dispose() {
+    _endpointCtrl.dispose();
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  static String _fmtWhen(DateTime d) {
+    final l = d.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(l.day)}/${two(l.month)} ${two(l.hour)}:${two(l.minute)}';
+  }
+
+  void _save() {
+    final notifier = ref.read(syncProvider.notifier);
+    notifier.setEndpoint(_endpointCtrl.text);
+    final raw = _codeCtrl.text.trim();
+    if (raw.isEmpty) {
+      setState(() => _codeError = 'Inserisci o genera un codice.');
+      return;
+    }
+    if (!notifier.setCode(raw)) {
+      setState(() => _codeError = 'Codice non valido: servono 12 caratteri.');
+      return;
+    }
+    _codeCtrl.text = formatSyncCode(normalizeSyncCode(raw)!);
+    setState(() => _codeError = null);
+    notifier.syncNow();
+  }
+
+  void _generate() {
+    final code = ref.read(syncProvider.notifier).createCode();
+    _codeCtrl.text = formatSyncCode(code);
+    ref.read(syncProvider.notifier).setEndpoint(_endpointCtrl.text);
+    setState(() => _codeError = null);
+  }
+
+  void _disable() {
+    ref.read(syncProvider.notifier).disable();
+    _codeCtrl.clear();
+    setState(() => _codeError = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = ref.watch(syncProvider);
+
+    final String status;
+    if (!sync.enabled) {
+      status = 'Non attiva su questo dispositivo.';
+    } else if (sync.lastSyncAt != null) {
+      status = 'Attiva • ultima sincronizzazione ${_fmtWhen(sync.lastSyncAt!)}';
+    } else {
+      status = 'Attiva • mai sincronizzata';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tiene allineati preferiti e "Continua a guardare" tra telefono, TV e PC. '
+          'Usa lo stesso codice su ogni dispositivo. Le playlist e le password NON '
+          'vengono sincronizzate.',
+          style: _kItemDesc,
+        ),
+        const SizedBox(height: 12),
+        TvTextFormField(
+          controller: _endpointCtrl,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: 'Indirizzo del servizio',
+            hintText: 'https://...workers.dev',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TvTextFormField(
+          controller: _codeCtrl,
+          decoration: InputDecoration(
+            labelText: 'Codice di sincronizzazione',
+            hintText: 'ABCD-EFGH-JKLM',
+            errorText: _codeError,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TvFocusable(
+                borderRadius: 14,
+                onTap: _save,
+                child: const _ModeChip(label: 'Salva e sincronizza', selected: false),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TvFocusable(
+                borderRadius: 14,
+                onTap: _generate,
+                child: const _ModeChip(label: 'Genera codice', selected: false),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TvFocusable(
+          onTap: sync.running ? () {} : () => ref.read(syncProvider.notifier).syncNow(),
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: sync.running
+                ? const SizedBox(
+                    width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.cloud_sync_outlined),
+            title: Text(
+              sync.running ? 'Sincronizzazione in corso...' : 'Sincronizza ora',
+              style: _kItemTitle,
+            ),
+            subtitle: Text(sync.error ?? status, style: _kItemDesc),
+          ),
+        ),
+        if (sync.enabled)
+          TvFocusable(
+            onTap: _disable,
+            child: const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.link_off),
+              title: Text('Disattiva su questo dispositivo', style: _kItemTitle),
+              subtitle: Text(
+                'i dati locali restano; gli altri dispositivi continuano',
+                style: _kItemDesc,
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        const Text(
+          'Chiunque conosca il codice può leggere e modificare questi dati: '
+          'trattalo come una password.',
+          style: _kItemDesc,
+        ),
+      ],
     );
   }
 }

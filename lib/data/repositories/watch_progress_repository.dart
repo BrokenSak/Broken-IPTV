@@ -1,5 +1,6 @@
 import '../models/watch_progress.dart';
 import '../services/storage_service.dart';
+import '../services/sync_tombstones.dart';
 
 class WatchProgressRepository {
   List<WatchProgress> getAll() {
@@ -14,10 +15,13 @@ class WatchProgressRepository {
   }
 
   Future<void> save(WatchProgress p) {
+    // Watching something again undoes a previous "rimuovi da Continua".
+    SyncTombstones.clear(SyncTombstones.progress, p.key);
     return StorageService.watchProgressBox.put(p.key, p.toMap());
   }
 
   Future<void> remove(String key) {
+    SyncTombstones.mark(SyncTombstones.progress, key);
     return StorageService.watchProgressBox.delete(key);
   }
 

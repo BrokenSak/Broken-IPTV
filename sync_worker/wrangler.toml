@@ -1,0 +1,10 @@
+name = "broken-iptv-sync"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Riempi database_id dopo `wrangler d1 create broken-iptv-sync`
+# (il comando lo stampa; incollalo qui).
+[[d1_databases]]
+binding = "DB"
+database_name = "broken-iptv-sync"
+database_id = "PASTE_DATABASE_ID_HERE"
