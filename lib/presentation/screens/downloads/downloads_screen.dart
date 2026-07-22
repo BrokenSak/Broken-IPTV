@@ -187,6 +187,10 @@ class _DownloadTile extends ConsumerWidget {
     final wp = ref.read(watchProgressProvider.notifier);
     final params = <String, String>{
       'url': item.filePath ?? '',
+      // Plays from disk, but the resume point records the stream URL: the
+      // local path means nothing on the TV or the PC, and "continua a
+      // guardare" is synced across devices.
+      'progressUrl': item.remoteUrl,
       'name': item.episodeLabel ?? item.name,
       if (item.imageUrl != null) 'poster': item.imageUrl!,
     };

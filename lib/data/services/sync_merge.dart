@@ -183,6 +183,16 @@ String? normalizeSyncCode(String raw) {
   return cleaned;
 }
 
+/// Cleans anything a human might type into the bare code, capped at
+/// [kSyncCodeLength]. Unlike [normalizeSyncCode] it accepts a partial code —
+/// it's what the on-screen field uses while you're still typing.
+String partialSyncCode(String raw) {
+  final cleaned = raw.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '');
+  return cleaned.length > kSyncCodeLength
+      ? cleaned.substring(0, kSyncCodeLength)
+      : cleaned;
+}
+
 /// `ABCD-EFGH-JKLM` — only for display; storage always uses the bare code.
 String formatSyncCode(String code) {
   final groups = <String>[];

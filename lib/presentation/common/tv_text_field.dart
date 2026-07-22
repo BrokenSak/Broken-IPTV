@@ -26,6 +26,7 @@ class TvTextFormField extends StatefulWidget {
     this.onChanged,
     this.autofocus = false,
     this.style,
+    this.inputFormatters,
   });
 
   final TextEditingController? controller;
@@ -41,6 +42,7 @@ class TvTextFormField extends StatefulWidget {
   final bool autofocus;
 
   final TextStyle? style;
+  final List<TextInputFormatter>? inputFormatters;
 
   /// Test hook: forces TV mode regardless of the host platform.
   @visibleForTesting
@@ -120,6 +122,7 @@ class _TvTextFormFieldState extends State<TvTextFormField> {
         onChanged: widget.onChanged,
         autofocus: widget.autofocus,
         style: widget.style,
+        inputFormatters: widget.inputFormatters,
       );
     }
 
@@ -152,6 +155,7 @@ class _TvTextFormFieldState extends State<TvTextFormField> {
             validator: widget.validator,
             onChanged: widget.onChanged,
             style: widget.style,
+            inputFormatters: widget.inputFormatters,
             // Done/Next on the TV keyboard: close the IME and resume navigation
             // on this field (Down then moves on).
             onEditingComplete: () => _wrapperNode.requestFocus(),

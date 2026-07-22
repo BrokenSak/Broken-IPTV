@@ -1,7 +1,7 @@
 {
-  "build": 6,
-  "version": "1.3.2",
-  "notes": "Sincronizzazione tra dispositivi e correzione dell'aggiornamento automatico (prima non rilevava mai le nuove versioni).",
+  "build": 7,
+  "version": "1.3.3",
+  "notes": "Niente elementi evidenziati da soli sul telefono, i download riprendono su tutti i dispositivi e il codice di sincronizzazione si formatta da solo.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

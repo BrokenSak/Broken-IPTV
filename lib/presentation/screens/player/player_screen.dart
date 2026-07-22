@@ -67,9 +67,18 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.vodId,
     this.posterUrl,
     this.resumeMs = 0,
+    this.progressUrl,
   });
 
   final String? streamUrl;
+
+  /// What to record in "continua a guardare" instead of [streamUrl].
+  ///
+  /// Set only when playing a **downloaded file**: playback reads the local
+  /// path, but that path means nothing on the phone's other devices (nor here
+  /// once the download is deleted), so the resume point stores the streamable
+  /// URL and syncs across devices like any other.
+  final String? progressUrl;
 
   /// True for live TV channels: no seek bar, no speed, never stops.
   final bool isLive;
@@ -104,6 +113,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _currentEpisodeLabel;
   String? _currentStreamId;
   String _currentUrl = '';
+
+  /// URL to store in the resume point. Normally what is playing, but a
+  /// downloaded file plays from disk and that path is meaningless elsewhere —
+  /// there we save the stream URL so "continua a guardare" works on every
+  /// device. Only while still on the item we were opened with: moving to the
+  /// next episode makes [_currentUrl] the truth again.
+  String get _resumeUrl {
+    final override = widget.progressUrl;
+    if (override != null && override.isNotEmpty && _currentUrl == widget.streamUrl) {
+      return override;
+    }
+    return _currentUrl;
+  }
 
   bool _controlsVisible = true;
   Timer? _hideTimer;
@@ -401,7 +423,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             episodeLabel: null,
             name: widget.channelName ?? '',
             imageUrl: widget.posterUrl,
-            url: _currentUrl,
+            url: _resumeUrl,
             positionMs: pos,
             durationMs: dur,
             updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -414,7 +436,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             episodeLabel: _currentEpisodeLabel,
             name: widget.channelName ?? '',
             imageUrl: widget.posterUrl,
-            url: _currentUrl,
+            url: _resumeUrl,
             positionMs: pos,
             durationMs: dur,
             updatedAt: DateTime.now().millisecondsSinceEpoch,

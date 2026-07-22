@@ -115,6 +115,7 @@ final appRouter = GoRouter(
           vodId: q['vodId'],
           posterUrl: q['poster'],
           resumeMs: int.tryParse(q['resume'] ?? '') ?? 0,
+          progressUrl: q['progressUrl'],
         );
       },
     ),

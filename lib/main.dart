@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'core/fullscreen.dart';
+import 'data/services/device_mode_service.dart';
 import 'data/services/storage_service.dart';
 import 'state/sync_providers.dart';
 
@@ -14,6 +15,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   await StorageService.init();
+
+  // Ask the OS once whether this is a TV, and cache it: the focus policy needs
+  // the answer synchronously while building, and it decides whether the device
+  // picker comes up with a pre-focused card (Firestick: yes, a remote needs a
+  // target) or with nothing lit (phone: a lit card looks already selected).
+  DeviceModeService.detectedIsTv = await DeviceModeService().detectIsTv();
 
   // Android is fullscreen for good: no toggle anywhere, re-asserted on every
   // resume (see BrokenIptvApp).

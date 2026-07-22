@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -419,6 +420,24 @@ class _AccountSection extends ConsumerWidget {
   }
 }
 
+/// Types the sync code for you: uppercases, drops anything that isn't a letter
+/// or digit, stops at 12 characters and groups them as `ABCD-EFGH-JKLM`. The
+/// shape is fixed, so there is no reason to make anyone type the dashes.
+class _SyncCodeFormatter extends TextInputFormatter {
+  const _SyncCodeFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue _, TextEditingValue next) {
+    final text = formatSyncCode(partialSyncCode(next.text));
+    // Caret to the end: the code is entered left to right, and re-inserting
+    // dashes mid-string would otherwise leave it in the wrong place.
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
 /// "Sincronizzazione": preferiti e "Continua a guardare" uguali su ogni
 /// dispositivo. No accounts — whoever holds the code sees the data, which the
 /// warning at the bottom says out loud.
@@ -521,6 +540,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
         const SizedBox(height: 12),
         TvTextFormField(
           controller: _codeCtrl,
+          inputFormatters: const [_SyncCodeFormatter()],
           decoration: InputDecoration(
             labelText: 'Codice di sincronizzazione',
             hintText: 'ABCD-EFGH-JKLM',

@@ -196,6 +196,23 @@ void main() {
       expect(formatSyncCode('ABCDEFGHJKLM'), 'ABCD-EFGH-JKLM');
       expect(normalizeSyncCode(formatSyncCode('ABCDEFGHJKLM')), 'ABCDEFGHJKLM');
     });
+
+    test('the field can group a code while it is still being typed', () {
+      // What the settings field does on every keystroke: the shape is fixed,
+      // so nobody should have to type the dashes.
+      String typed(String s) => formatSyncCode(partialSyncCode(s));
+
+      expect(typed(''), '');
+      expect(typed('ab'), 'AB');
+      expect(typed('abcd'), 'ABCD');
+      expect(typed('abcde'), 'ABCD-E');
+      expect(typed('abcdefghjklm'), 'ABCD-EFGH-JKLM');
+      // Pasting an already-grouped code must not double the dashes.
+      expect(typed('ABCD-EFGH-JKLM'), 'ABCD-EFGH-JKLM');
+      // Junk and overflow are dropped rather than rejected.
+      expect(typed('ab!c d/e'), 'ABCD-E');
+      expect(typed('ABCDEFGHJKLMNOPQ'), 'ABCD-EFGH-JKLM');
+    });
   });
 
   group('local store', () {
