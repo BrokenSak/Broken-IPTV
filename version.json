@@ -1,0 +1,7 @@
+{
+  "build": 3,
+  "version": "1.2.0",
+  "notes": "Aggiornamento automatico in-app, controlli tastiera su Windows e rifiniture player.",
+  "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
+  "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
+}

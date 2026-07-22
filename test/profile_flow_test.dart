@@ -9,6 +9,7 @@ import 'package:broken_iptv/app.dart';
 import 'package:broken_iptv/data/services/secure_credentials_service.dart';
 import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/state/profile_providers.dart';
+import 'package:broken_iptv/state/update_providers.dart';
 
 /// Real credential storage touches platform channels/FFI (Windows DPAPI via
 /// path_provider) that aren't wired up in a widget-test host, so tests use
@@ -43,6 +44,9 @@ void main() {
       ProviderScope(
         overrides: [
           secureCredentialsServiceProvider.overrideWithValue(FakeSecureCredentialsService()),
+          // The home checks for updates (PackageInfo + network) — pin it off so
+          // the test never touches a platform channel or the network.
+          updateCheckProvider.overrideWith((ref) async => null),
         ],
         child: const BrokenIptvApp(),
       ),

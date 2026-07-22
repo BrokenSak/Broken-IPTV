@@ -2,6 +2,10 @@
     <!-- Explicit INTERNET permission so a release build never depends on a
          plugin to pull it in. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- In-app update: the app downloads the new APK itself and asks the system
+         package installer to install it (one system confirmation — a sideload
+         app can't install silently). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <!-- TV support (Firestick / Android TV) without excluding phones:
          required="false" everywhere, so the same APK still installs on a
