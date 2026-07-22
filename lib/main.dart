@@ -73,6 +73,13 @@ class _SyncOnWindowClose with WindowListener {
           .syncIfChanged()
           .timeout(const Duration(seconds: 4));
     } catch (_) {}
-    await windowManager.destroy();
+    try {
+      await windowManager.destroy();
+    } catch (_) {
+      // Never leave the guard latched on a failed destroy: the user would be
+      // left with a window that ignores every further close.
+      _closing = false;
+      rethrow;
+    }
   }
 }
