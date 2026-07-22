@@ -8,10 +8,12 @@ import '../data/services/sync_service.dart';
 import 'favorites_providers.dart';
 import 'watch_progress_providers.dart';
 
-/// Address of the sync backend. Empty by default: the backend is the user's
-/// own Cloudflare Worker (see `sync_worker/README.md`), so the URL is pasted
-/// into Settings once and kept in prefs. Fill this in to ship a default.
-const kDefaultSyncEndpoint = '';
+/// Address of the sync backend: our own Cloudflare Worker (source and deploy
+/// steps in `sync_worker/`). Not a secret — the data is protected by the sync
+/// code, which never leaves the devices — so it ships in the app and a new
+/// device only needs the code. Settings can still override it (diagnostics, or
+/// pointing a device at a different backend).
+const kDefaultSyncEndpoint = 'https://broken-iptv-sync.bknsync.workers.dev';
 
 /// Never hammer the backend: two triggers closer than this do one round trip.
 const _kMinInterval = Duration(seconds: 30);
@@ -75,9 +77,13 @@ class SyncNotifier extends Notifier<SyncState> {
   SyncState build() {
     final prefs = StorageService.prefsBox;
     final lastAt = (prefs.get(_lastAtKey) as num?)?.toInt();
+    // An empty stored value falls back to the shipped default too: an early
+    // build had no default, so a device that opened Settings back then could
+    // have saved a blank endpoint and would otherwise never pick the new one up.
+    final stored = (prefs.get(_endpointKey) as String?)?.trim();
     return SyncState(
       code: prefs.get(_codeKey) as String?,
-      endpoint: (prefs.get(_endpointKey) as String?) ?? kDefaultSyncEndpoint,
+      endpoint: (stored == null || stored.isEmpty) ? kDefaultSyncEndpoint : stored,
       lastSyncAt: lastAt == null ? null : DateTime.fromMillisecondsSinceEpoch(lastAt),
     );
   }

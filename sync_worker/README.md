@@ -28,7 +28,9 @@ Serve un account Cloudflare (gratuito) e Node.js installato.
    npx wrangler d1 create broken-iptv-sync
    ```
 
-3. **Incolla quell'id** in `wrangler.toml` al posto di `PASTE_DATABASE_ID_HERE`.
+3. **Copia `wrangler.toml.example` in `wrangler.toml`** e incolla quell'id al
+   posto di `PASTE_DATABASE_ID_HERE`. Il file `wrangler.toml` è gitignorato di
+   proposito: l'id è legato al tuo account Cloudflare e non va sul repo pubblico.
 
 4. **Crea la tabella** (in remoto, non solo in locale):
 

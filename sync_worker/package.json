@@ -1,0 +1,14 @@
+{
+  "name": "broken-iptv-sync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Backend di sincronizzazione di Broken IPTV (Cloudflare Worker + D1).",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "schema": "wrangler d1 execute broken-iptv-sync --remote --file=./schema.sql",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -54,3 +54,9 @@ android/keystore/
 # Build outputs / packaged deliverables (large binaries, not source).
 /installer/output/
 /app pronte/
+
+# Sync backend: wrangler.toml carries the D1 database_id, which is tied to the
+# user's own Cloudflare account. Deploy from a local copy of the example.
+sync_worker/wrangler.toml
+sync_worker/.wrangler/
+sync_worker/node_modules/
