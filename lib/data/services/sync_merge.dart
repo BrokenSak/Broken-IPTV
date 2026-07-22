@@ -193,6 +193,23 @@ String partialSyncCode(String raw) {
       : cleaned;
 }
 
+/// What the code field shows while you type it: cleaned, grouped, and with the
+/// separator already in place **as soon as a group of four is complete** — so
+/// it is visibly automatic and nobody adds one by hand (waiting for the fifth
+/// character to reveal it is exactly when people type their own).
+///
+/// [deleting] drops that trailing separator: without it, backspacing over the
+/// dash would put it straight back and the caret could never get past it.
+String syncCodeAsTyped(String raw, {bool deleting = false}) {
+  final digits = partialSyncCode(raw);
+  final grouped = formatSyncCode(digits);
+  final groupJustCompleted = digits.isNotEmpty && digits.length % 4 == 0;
+  if (deleting || !groupJustCompleted || digits.length >= kSyncCodeLength) {
+    return grouped;
+  }
+  return '$grouped-';
+}
+
 /// `ABCD-EFGH-JKLM` — only for display; storage always uses the bare code.
 String formatSyncCode(String code) {
   final groups = <String>[];

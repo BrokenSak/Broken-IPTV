@@ -197,21 +197,33 @@ void main() {
       expect(normalizeSyncCode(formatSyncCode('ABCDEFGHJKLM')), 'ABCDEFGHJKLM');
     });
 
-    test('the field can group a code while it is still being typed', () {
-      // What the settings field does on every keystroke: the shape is fixed,
-      // so nobody should have to type the dashes.
-      String typed(String s) => formatSyncCode(partialSyncCode(s));
+    test('the field groups the code while it is still being typed', () {
+      String typed(String s) => syncCodeAsTyped(s);
 
       expect(typed(''), '');
       expect(typed('ab'), 'AB');
-      expect(typed('abcd'), 'ABCD');
+      // The separator appears on the FOURTH character, not the fifth: waiting
+      // for the fifth hides that it is automatic, and people type their own.
+      expect(typed('abcd'), 'ABCD-');
       expect(typed('abcde'), 'ABCD-E');
+      expect(typed('abcdefgh'), 'ABCD-EFGH-');
+      // Complete: no dangling separator, there is nothing left to type.
       expect(typed('abcdefghjklm'), 'ABCD-EFGH-JKLM');
       // Pasting an already-grouped code must not double the dashes.
       expect(typed('ABCD-EFGH-JKLM'), 'ABCD-EFGH-JKLM');
       // Junk and overflow are dropped rather than rejected.
       expect(typed('ab!c d/e'), 'ABCD-E');
       expect(typed('ABCDEFGHJKLMNOPQ'), 'ABCD-EFGH-JKLM');
+    });
+
+    test('deleting can get past the automatic separator', () {
+      // Without this the field is a trap: backspace removes the dash, the
+      // formatter puts it straight back, and the 4th character is unreachable.
+      expect(syncCodeAsTyped('ABCD', deleting: true), 'ABCD');
+      expect(syncCodeAsTyped('ABC', deleting: true), 'ABC');
+      expect(syncCodeAsTyped('ABCD-EFGH', deleting: true), 'ABCD-EFGH');
+      // Typing again re-adds it.
+      expect(syncCodeAsTyped('ABCD'), 'ABCD-');
     });
   });
 

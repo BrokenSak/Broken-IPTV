@@ -427,8 +427,13 @@ class _SyncCodeFormatter extends TextInputFormatter {
   const _SyncCodeFormatter();
 
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue _, TextEditingValue next) {
-    final text = formatSyncCode(partialSyncCode(next.text));
+  TextEditingValue formatEditUpdate(TextEditingValue old, TextEditingValue next) {
+    // Shorter than before = the user is deleting, which suppresses the
+    // trailing separator (see syncCodeAsTyped) so backspace can get past it.
+    final text = syncCodeAsTyped(
+      next.text,
+      deleting: next.text.length < old.text.length,
+    );
     // Caret to the end: the code is entered left to right, and re-inserting
     // dashes mid-string would otherwise leave it in the wrong place.
     return TextEditingValue(
