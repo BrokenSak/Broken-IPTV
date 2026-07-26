@@ -29,6 +29,14 @@ class FakeLiveRepository extends LiveRepository {
         Channel(streamId: '100', name: 'Canale Test', categoryId: categoryId),
       ];
 
+  // The grid now fills from the full list, filtered by category on the device
+  // (panels that ignore category_id returned an empty per-category list).
+  @override
+  Future<List<Channel>> getAllChannels() async => const [
+        Channel(streamId: '100', name: 'Canale Test', categoryId: '1'),
+        Channel(streamId: '200', name: 'Altro Canale', categoryId: '2'),
+      ];
+
   @override
   Future<List<EpgProgram>> getShortEpg(String streamId, {int limit = 20}) async => const [];
 

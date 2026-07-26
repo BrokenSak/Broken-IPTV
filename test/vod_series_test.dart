@@ -31,6 +31,12 @@ class FakeVodRepository extends VodRepository {
   Future<List<VodItem>> getItems(String categoryId) async => [
         VodItem(streamId: '10', name: 'Film Test', categoryId: categoryId),
       ];
+
+  // The grid fills from the full list, filtered by category on the device.
+  @override
+  Future<List<VodItem>> getAllItems() async => const [
+        VodItem(streamId: '10', name: 'Film Test', categoryId: '1'),
+      ];
 }
 
 class FakeSeriesRepository extends SeriesRepository {
@@ -44,6 +50,12 @@ class FakeSeriesRepository extends SeriesRepository {
   @override
   Future<List<SeriesItem>> getItems(String categoryId) async => [
         SeriesItem(seriesId: '20', name: 'Serie Test', categoryId: categoryId),
+      ];
+
+  // The grid fills from the full list, filtered by category on the device.
+  @override
+  Future<List<SeriesItem>> getAllItems() async => const [
+        SeriesItem(seriesId: '20', name: 'Serie Test', categoryId: '1'),
       ];
 }
 

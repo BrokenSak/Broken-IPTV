@@ -175,23 +175,31 @@ class _ChannelGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final channels = ref.watch(liveStreamsProvider(categoryId));
+    // Filter the full channel list (already fetched for counts/search) by
+    // category ON THE DEVICE, instead of asking the panel for
+    // get_live_streams&category_id=X. Some panels serve the category list and
+    // the full stream list fine but answer that per-category call with an empty
+    // (or blocked) response — which showed up as "categories load but no
+    // channels". Client-side filtering is also one network call fewer, and an
+    // error now surfaces a retry instead of a silent empty grid.
+    final channels = ref.watch(allChannelsProvider);
 
     return channels.when(
-      data: (list) {
+      data: (all) {
+        final list = all.where((c) => c.categoryId == categoryId).toList();
         if (list.isEmpty) {
           return const Center(child: Text('Nessun canale in questa categoria.'));
         }
         return _channelGridView(
           itemCount: list.length,
-          itemBuilder: (context, index) {
-            final channel = list[index];
-            return _ChannelTile(channel: channel);
-          },
+          itemBuilder: (context, index) => _ChannelTile(channel: list[index]),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Errore: $error')),
+      error: (error, _) => ErrorRetry(
+        message: cleanError(error),
+        onRetry: () => ref.invalidate(allChannelsProvider),
+      ),
     );
   }
 }

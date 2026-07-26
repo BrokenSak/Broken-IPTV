@@ -350,17 +350,25 @@ class _VodGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(vodItemsProvider(categoryId));
+    // Filter the full catalog client-side (see the note in live_tv's
+    // _ChannelGrid): panels that ignore category_id on get_vod_streams return
+    // an empty per-category list, so the category looked empty. The full list
+    // is already fetched for the counts.
+    final all = ref.watch(allVodProvider);
 
-    return items.when(
-      data: (list) {
+    return all.when(
+      data: (items) {
+        final list = items.where((i) => i.categoryId == categoryId).toList();
         if (list.isEmpty) {
           return const Center(child: Text('Nessun film in questa categoria.'));
         }
         return _posterGrid(list);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Errore: $error')),
+      error: (error, _) => ErrorRetry(
+        message: cleanError(error),
+        onRetry: () => ref.invalidate(allVodProvider),
+      ),
     );
   }
 }

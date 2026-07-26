@@ -74,6 +74,9 @@ class FakeVodRepository extends VodRepository {
   @override
   Future<List<VodItem>> getItems(String categoryId) async =>
       [VodItem(streamId: '10', name: 'Film Test', categoryId: categoryId)];
+
+  @override
+  Future<List<VodItem>> getAllItems() async => getItems('1');
 }
 
 class FakeSeriesRepository extends SeriesRepository {
@@ -86,6 +89,9 @@ class FakeSeriesRepository extends SeriesRepository {
   @override
   Future<List<SeriesItem>> getItems(String categoryId) async =>
       [SeriesItem(seriesId: '20', name: 'Serie Test', categoryId: categoryId)];
+
+  @override
+  Future<List<SeriesItem>> getAllItems() async => getItems('1');
 }
 
 class _FixedSelectedProfileId extends SelectedProfileIdNotifier {

@@ -1,7 +1,7 @@
 {
-  "build": 11,
-  "version": "1.3.7",
-  "notes": "Navigazione col telecomando migliorata: ora puoi modificare ed eliminare le playlist, la barra di avanzamento del player non blocca più il focus, l'occhietto della password è raggiungibile e le icone in alto si evidenziano correttamente.",
+  "build": 12,
+  "version": "1.3.8",
+  "notes": "Risolto il caso in cui alcune liste mostravano le categorie ma non i canali: ora la griglia filtra la lista completa sul dispositivo, così i canali (e i film/serie) compaiono anche con i pannelli che ignorano il filtro per categoria.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

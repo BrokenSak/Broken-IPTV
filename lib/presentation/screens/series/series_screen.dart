@@ -360,17 +360,25 @@ class _SeriesGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(seriesItemsProvider(categoryId));
+    // Filter the full catalog client-side (see the note in live_tv's
+    // _ChannelGrid): panels that ignore category_id on get_series return an
+    // empty per-category list, so the category looked empty. The full list is
+    // already fetched for the counts.
+    final all = ref.watch(allSeriesProvider);
 
-    return items.when(
-      data: (list) {
+    return all.when(
+      data: (items) {
+        final list = items.where((i) => i.categoryId == categoryId).toList();
         if (list.isEmpty) {
           return const Center(child: Text('Nessuna serie in questa categoria.'));
         }
         return _posterGrid(list);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Errore: $error')),
+      error: (error, _) => ErrorRetry(
+        message: cleanError(error),
+        onRetry: () => ref.invalidate(allSeriesProvider),
+      ),
     );
   }
 }

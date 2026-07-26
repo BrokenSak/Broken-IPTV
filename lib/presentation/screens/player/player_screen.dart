@@ -1550,8 +1550,10 @@ class _ChannelListOverlayState extends ConsumerState<_ChannelListOverlay> {
     final panelH = (size.height - bottomOffset - 96).clamp(220.0, 560.0);
 
     final cats = ref.watch(liveCategoriesProvider).value ?? const [];
-    final channelsAsync =
-        _catId == null ? ref.watch(allChannelsProvider) : ref.watch(liveStreamsProvider(_catId!));
+    // Always read the full channel list and filter by category on the device:
+    // some panels ignore category_id and return an empty per-category list (see
+    // the note in live_tv's _ChannelGrid), which left the overlay blank.
+    final channelsAsync = ref.watch(allChannelsProvider);
 
     return Positioned.fill(
       child: Stack(
@@ -1605,7 +1607,10 @@ class _ChannelListOverlayState extends ConsumerState<_ChannelListOverlay> {
                   const Divider(height: 1),
                   Expanded(
                     child: channelsAsync.when(
-                      data: (list) {
+                      data: (all) {
+                        final list = _catId == null
+                            ? all
+                            : all.where((c) => c.categoryId == _catId).toList();
                         if (list.isEmpty) {
                           return const Center(
                             child: Text('Nessun canale.',
