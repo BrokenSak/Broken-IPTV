@@ -289,42 +289,81 @@ class _PlaylistTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = selected ? Colors.black : AppColors.textPrimary;
     final subFg = selected ? Colors.black54 : AppColors.textSecondary;
-    return TvFocusable(
-      borderRadius: 14,
-      autofocus: autofocus,
-      onTap: onSelect,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.glassBorder),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.playlist_play, color: selected ? Colors.black : AppColors.accent),
-            const SizedBox(width: 12),
-            // Only the name is shown here — host/username appear only in Edit.
-            Expanded(
-              child: Text(
-                profile.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 16),
+    // Three side-by-side focus stops — select · modifica · elimina — instead of
+    // the edit/delete buttons nested INSIDE the select area. A TV remote can't
+    // move focus into a button that sits within the currently-focused node
+    // (the D-pad found nothing to the "right" inside the tile), so with the old
+    // layout modifica/elimina were unreachable by remote. As siblings the D-pad
+    // steps left/right between them, each with its own focus ring.
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: selected ? Colors.white : Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TvFocusable(
+              borderRadius: 14,
+              autofocus: autofocus,
+              onTap: onSelect,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+                child: Row(
+                  children: [
+                    Icon(Icons.playlist_play, color: selected ? Colors.black : AppColors.accent),
+                    const SizedBox(width: 12),
+                    // Only the name is shown here — host/username appear only in Edit.
+                    Expanded(
+                      child: Text(
+                        profile.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            IconButton(
-              tooltip: 'Modifica',
-              icon: Icon(Icons.edit_outlined, color: subFg),
-              onPressed: onEdit,
-            ),
-            IconButton(
-              tooltip: 'Elimina',
-              icon: Icon(Icons.delete_outline, color: subFg),
-              onPressed: onDelete,
-            ),
-          ],
+          ),
+          _IconAction(icon: Icons.edit_outlined, color: subFg, onTap: onEdit, tooltip: 'Modifica'),
+          _IconAction(icon: Icons.delete_outline, color: subFg, onTap: onDelete, tooltip: 'Elimina'),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small icon action (modifica/elimina) that is its own D-pad focus stop, so
+/// a remote can reach it — see [_PlaylistTile].
+class _IconAction extends StatelessWidget {
+  const _IconAction({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: TvFocusable(
+        borderRadius: 12,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, color: color),
         ),
       ),
     );

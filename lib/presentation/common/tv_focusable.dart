@@ -179,3 +179,38 @@ class _TvFocusableState extends State<TvFocusable> {
     );
   }
 }
+
+/// An icon button for app bars / toolbars that goes through [TvFocusable], so a
+/// D-pad focuses it with the same white ring as the rest of the app. A plain
+/// Material [IconButton] only shows a faint focus highlight here (the theme
+/// zeroes `highlightColor` + uses `NoSplash`), which on TV looked like the
+/// button couldn't be reached. Tap, click and OK all fire [onPressed]; the
+/// [tooltip] is an accessibility label only (no pop-up box).
+class TvIconButton extends StatelessWidget {
+  const TvIconButton({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final Widget icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: TvFocusable(
+        borderRadius: 24,
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: icon,
+        ),
+      ),
+    );
+  }
+}

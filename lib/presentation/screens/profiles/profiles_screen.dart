@@ -121,27 +121,82 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TvFocusable(
-      onTap: onSelect,
-      autofocus: autofocus,
-      child: Card(
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: const CircleAvatar(
-            backgroundColor: AppColors.surfaceElevated,
-            child: Icon(Icons.playlist_play, color: AppColors.accent),
+    // select · modifica · elimina as three side-by-side D-pad focus stops. The
+    // edit/delete buttons used to be nested inside the tile's TvFocusable, where
+    // a remote could never move focus into them; as siblings each is reachable
+    // with its own focus ring.
+    return Card(
+      child: Row(
+        children: [
+          Expanded(
+            child: TvFocusable(
+              onTap: onSelect,
+              autofocus: autofocus,
+              borderRadius: 12,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: AppColors.surfaceElevated,
+                      child: Icon(Icons.playlist_play, color: AppColors.accent),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            profile.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${profile.username}@${profile.host}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          title: Text(profile.name, style: Theme.of(context).textTheme.titleLarge),
-          subtitle: Text('${profile.username}@${profile.host}'),
-          // No ListTile.onTap: it would be a second focus node on TV — taps
-          // and OK go through the TvFocusable wrapper instead.
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(icon: const Icon(Icons.edit_outlined), onPressed: onEdit),
-              IconButton(icon: const Icon(Icons.delete_outline), onPressed: onDelete),
-            ],
-          ),
+          _IconAction(icon: Icons.edit_outlined, onTap: onEdit, tooltip: 'Modifica'),
+          _IconAction(icon: Icons.delete_outline, onTap: onDelete, tooltip: 'Elimina'),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small icon action (modifica/elimina) that is its own D-pad focus stop, so
+/// a remote can reach it — see [_ProfileTile].
+class _IconAction extends StatelessWidget {
+  const _IconAction({required this.icon, required this.onTap, this.tooltip});
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: TvFocusable(
+        borderRadius: 12,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, color: AppColors.textSecondary),
         ),
       ),
     );

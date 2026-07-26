@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui_mode.dart';
 import '../../../data/models/favorite_item.dart';
 import '../../../data/models/series_item.dart';
 import '../../../state/favorites_providers.dart';
@@ -266,7 +267,11 @@ class _SeriesFavorites extends ConsumerWidget {
         .where((f) => f.type == FavoriteType.series && !adultIds.contains(f.id))
         .toList();
     if (favs.isEmpty) {
-      return const Center(child: Text('Nessuna serie preferita. Tocca il cuore su una serie.'));
+      return Center(
+        child: Text(isTvMode()
+            ? 'Nessuna serie preferita. Tieni premuto OK su una serie per aggiungerla.'
+            : 'Nessuna serie preferita. Tocca il cuore su una serie.'),
+      );
     }
     return _posterGrid(
       favs.map((f) => SeriesItem(seriesId: f.id, name: f.name, categoryId: '', coverUrl: f.imageUrl)).toList(),

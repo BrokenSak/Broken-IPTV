@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui_mode.dart';
 import '../../../data/models/xtream_profile.dart';
 import '../../../data/services/xtream_api_service.dart';
 import '../../../state/profile_providers.dart';
@@ -153,18 +154,51 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Obbligatorio' : null,
               ),
               const SizedBox(height: 16),
-              TvTextFormField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              Row(
+                children: [
+                  Expanded(
+                    child: TvTextFormField(
+                      controller: _passwordController,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        // On TV the reveal toggle sits BESIDE the field (below):
+                        // a suffix icon lives inside the field, whose subtree is
+                        // skipTraversal, so a D-pad can never reach it. Touch and
+                        // mouse keep it inline as a suffix.
+                        suffixIcon: isTvMode()
+                            ? null
+                            : IconButton(
+                                icon: Icon(_obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined),
+                                onPressed: () =>
+                                    setState(() => _obscurePassword = !_obscurePassword),
+                              ),
+                      ),
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.next,
+                      validator: (v) => (v == null || v.isEmpty) ? 'Obbligatorio' : null,
+                    ),
                   ),
-                ),
-                obscureText: _obscurePassword,
-                textInputAction: TextInputAction.next,
-                validator: (v) => (v == null || v.isEmpty) ? 'Obbligatorio' : null,
+                  // TV: separate focusable button so the remote can reveal the
+                  // password (see the note above).
+                  if (isTvMode()) ...[
+                    const SizedBox(width: 8),
+                    TvFocusable(
+                      borderRadius: 12,
+                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 16),
               TvTextFormField(

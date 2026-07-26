@@ -97,6 +97,17 @@ class _BrokenIptvAppState extends ConsumerState<BrokenIptvApp> {
             },
             child: content,
           );
+        } else if (Platform.isAndroid) {
+          // TV/remote: tell the framework a directional pad drives navigation.
+          // Without this a focused Slider (the player's seek bar) eats Up/Down
+          // to nudge its value and TRAPS the D-pad on it — in directional mode
+          // a Slider only takes Left/Right, so Up/Down move focus off it to the
+          // buttons. Harmless on a touch phone (no arrow keys are ever sent).
+          content = MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(navigationMode: NavigationMode.directional),
+            child: content,
+          );
         }
         return content;
       },

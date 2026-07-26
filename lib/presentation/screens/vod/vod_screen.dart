@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui_mode.dart';
 import '../../../data/models/favorite_item.dart';
 import '../../../data/models/vod_item.dart';
 import '../../../state/favorites_providers.dart';
@@ -256,7 +257,11 @@ class _VodFavorites extends ConsumerWidget {
         .where((f) => f.type == FavoriteType.vod && !adultIds.contains(f.id))
         .toList();
     if (favs.isEmpty) {
-      return const Center(child: Text('Nessun film preferito. Tocca il cuore su un film.'));
+      return Center(
+        child: Text(isTvMode()
+            ? 'Nessun film preferito. Tieni premuto OK su un film per aggiungerlo.'
+            : 'Nessun film preferito. Tocca il cuore su un film.'),
+      );
     }
     return _posterGrid(
       favs.map((f) => VodItem(streamId: f.id, name: f.name, categoryId: '', posterUrl: f.imageUrl)).toList(),

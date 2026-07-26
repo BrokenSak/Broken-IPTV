@@ -81,21 +81,21 @@ class _CatalogScaffoldState extends ConsumerState<CatalogScaffold> {
             : Text(widget.title),
         actions: [
           if (_searching)
-            IconButton(icon: const Icon(Icons.close), onPressed: _closeSearch)
+            TvIconButton(icon: const Icon(Icons.close), onPressed: _closeSearch)
           else
-            IconButton(
+            TvIconButton(
               tooltip: 'Cerca',
               icon: const Icon(Icons.search),
               onPressed: () => setState(() => _searching = true),
             ),
           // Windows only: on Android the app is permanently fullscreen.
           if (fullscreenToggleAvailable)
-            IconButton(
+            TvIconButton(
               tooltip: isFullscreen ? 'Esci da schermo intero' : 'Schermo intero',
               icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
               onPressed: () => ref.read(fullscreenProvider.notifier).toggle(),
             ),
-          IconButton(
+          TvIconButton(
             tooltip: 'Impostazioni',
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => context.push('/settings'),

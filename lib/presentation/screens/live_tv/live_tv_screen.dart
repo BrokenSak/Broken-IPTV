@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui_mode.dart';
 import '../../../data/models/channel.dart';
 import '../../../data/models/epg_program.dart';
 import '../../../data/models/favorite_item.dart';
@@ -123,7 +124,11 @@ class _LiveFavorites extends ConsumerWidget {
         .where((f) => f.type == FavoriteType.live && !adultIds.contains(f.id))
         .toList();
     if (favs.isEmpty) {
-      return const Center(child: Text('Nessun canale preferito. Tocca il cuore su un canale.'));
+      return Center(
+        child: Text(isTvMode()
+            ? 'Nessun canale preferito. Tieni premuto OK su un canale per aggiungerlo.'
+            : 'Nessun canale preferito. Tocca il cuore su un canale.'),
+      );
     }
     return _channelGridView(
       itemCount: favs.length,

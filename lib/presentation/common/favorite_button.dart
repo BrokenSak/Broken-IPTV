@@ -146,7 +146,7 @@ class FavoriteButton extends ConsumerWidget {
             padding: const EdgeInsets.all(6),
             child: Icon(
               isFav ? Icons.favorite : Icons.favorite_border,
-              color: isFav ? Colors.white : Colors.white,
+              color: Colors.white,
               size: 20,
             ),
           ),
