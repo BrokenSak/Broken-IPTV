@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/download_support.dart';
+import '../../../core/format.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/download_item.dart';
 import '../../../data/models/vod_item.dart';
@@ -52,7 +53,9 @@ class VodDetailScreen extends ConsumerWidget {
                       SizedBox(width: 200, child: WatchBar(fraction: progress.fraction)),
                       const SizedBox(height: 4),
                       Text(
-                        progress.finished ? 'Visto' : 'Ripreso al ${_fmt(progress.positionMs)}',
+                        progress.finished
+                            ? 'Visto'
+                            : 'Ripreso al ${formatHms(Duration(milliseconds: progress.positionMs))}',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                       ),
                     ],
@@ -160,11 +163,4 @@ class VodDetailScreen extends ConsumerWidget {
     );
   }
 
-  String _fmt(int ms) {
-    final d = Duration(milliseconds: ms);
-    final h = d.inHours;
-    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
 }

@@ -11,7 +11,6 @@ import '../../presentation/screens/profiles/profiles_screen.dart';
 import '../../presentation/screens/profiles/add_profile_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
 import '../../presentation/screens/live_tv/live_tv_screen.dart';
-import '../../presentation/screens/epg/epg_screen.dart';
 import '../../presentation/screens/vod/vod_screen.dart';
 import '../../presentation/screens/vod/vod_detail_screen.dart';
 import '../../presentation/screens/series/series_screen.dart';
@@ -73,13 +72,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/live',
       builder: (context, state) => _bg(const LiveTvScreen()),
-    ),
-    GoRoute(
-      path: '/epg',
-      builder: (context, state) => _bg(EpgScreen(
-        streamId: state.uri.queryParameters['streamId'] ?? '',
-        channelName: state.uri.queryParameters['name'] ?? '',
-      )),
     ),
     GoRoute(
       path: '/vod',

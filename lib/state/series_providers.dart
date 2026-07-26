@@ -18,12 +18,6 @@ final seriesCategoriesProvider = FutureProvider<List<XtreamCategory>>((ref) asyn
   return repo.getCategories();
 });
 
-final seriesItemsProvider = FutureProvider.family<List<SeriesItem>, String>((ref, categoryId) async {
-  final repo = await ref.watch(seriesRepositoryProvider.future);
-  if (repo == null) return const [];
-  return repo.getItems(categoryId);
-});
-
 final seriesDetailProvider = FutureProvider.family<SeriesDetail, String>((ref, seriesId) async {
   final repo = await ref.watch(seriesRepositoryProvider.future);
   if (repo == null) throw Exception('Nessun profilo selezionato');

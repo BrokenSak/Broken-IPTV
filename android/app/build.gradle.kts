@@ -41,9 +41,11 @@ android {
                 storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
             }
-            // Sign with all schemes (v1 JAR + v2 + v3) for maximum device
-            // compatibility; some devices/Play Protect flag v2-only sideloads.
-            enableV1Signing = true
+            // v2 + v3 only (NO v1/JAR): minSdk is 24 (Android 7.0), where v2 is
+            // supported everywhere, so v1 is unnecessary — and v1 (JAR) signing
+            // is what the Janus exploit (CVE-2017-13156) abuses on Android 7.x.
+            // Dropping it closes that hole; a modern installer verifies v2/v3.
+            enableV1Signing = false
             enableV2Signing = true
             enableV3Signing = true
         }

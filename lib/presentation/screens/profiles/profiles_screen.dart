@@ -7,6 +7,7 @@ import '../../../data/models/xtream_profile.dart';
 import '../../../state/profile_providers.dart';
 import '../../common/app_dialogs.dart';
 import '../../common/app_logo.dart';
+import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
 
 class ProfilesScreen extends ConsumerWidget {
@@ -168,8 +169,8 @@ class _ProfileTile extends StatelessWidget {
               ),
             ),
           ),
-          _IconAction(icon: Icons.edit_outlined, onTap: onEdit, tooltip: 'Modifica'),
-          _IconAction(icon: Icons.delete_outline, onTap: onDelete, tooltip: 'Elimina'),
+          IconAction(icon: Icons.edit_outlined, onTap: onEdit, tooltip: 'Modifica'),
+          IconAction(icon: Icons.delete_outline, onTap: onDelete, tooltip: 'Elimina'),
           const SizedBox(width: 4),
         ],
       ),
@@ -177,28 +178,3 @@ class _ProfileTile extends StatelessWidget {
   }
 }
 
-/// A small icon action (modifica/elimina) that is its own D-pad focus stop, so
-/// a remote can reach it — see [_ProfileTile].
-class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.onTap, this.tooltip});
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: tooltip,
-      child: TvFocusable(
-        borderRadius: 12,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: AppColors.textSecondary),
-        ),
-      ),
-    );
-  }
-}

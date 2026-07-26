@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../core/format.dart';
 import '../../../core/fullscreen.dart';
+import '../../../core/pip.dart';
 import '../../../core/playback_activity.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/channel.dart';
@@ -294,6 +296,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     _scheduleHide();
 
+    // Phone only: allow Picture-in-Picture while a video is playing — pressing
+    // Home drops into a floating window instead of just backgrounding. Never on
+    // TV. The listener strips the controls overlay in the tiny PiP window.
+    if (isPhoneMode()) {
+      PipService.instance.addModeListener(_onPipModeChanged);
+      PipService.instance.setAllowed(true);
+    }
+
     // TV: the controls start visible, but the root Focus (autofocus) would
     // hold the focus with nothing highlighted and OK doing nothing until you
     // press an arrow. Land the focus on the main control right away, so the
@@ -444,9 +454,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _watchProgress.save(progress);
   }
 
+  /// PiP started/ended: in the tiny window there's no room for the controls
+  /// overlay or the channel list, so drop them on the way in.
+  void _onPipModeChanged(bool inPip) {
+    if (inPip && mounted) {
+      _hideControls();
+      if (_channelListOpen) setState(() => _channelListOpen = false);
+    }
+  }
+
   @override
   void dispose() {
     PlaybackActivity.active = false;
+    PipService.instance.setAllowed(false);
+    PipService.instance.removeModeListener(_onPipModeChanged);
     // Leaving the player: give rotation back to the system (empty list =
     // platform default, i.e. free rotation).
     if (Platform.isAndroid) {
@@ -669,13 +690,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
-  String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
   Widget _buildVideo(VideoAspect aspect) {
     switch (aspect) {
       case VideoAspect.original:
@@ -817,6 +831,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         streamId: _currentStreamId,
                         qualityLabel: _qualityLabel,
                         onBack: () => context.pop(),
+                        onPip: isPhoneMode() ? () => PipService.instance.enter() : null,
                       ),
                       const Spacer(),
                       _ControlsPanel(
@@ -838,7 +853,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         subtitlesOn: _subtitlesOn,
                         aspect: aspect,
                         skipSeconds: ref.watch(playerSettingsProvider).skipSeconds,
-                        formatDuration: _formatDuration,
+                        formatDuration: formatHms,
                         onSkipBack: () => _skip(-ref.read(playerSettingsProvider).skipSeconds),
                         onSkipForward: () => _skip(ref.read(playerSettingsProvider).skipSeconds),
                         onPlayPause: _togglePlayPause,
@@ -899,6 +914,7 @@ class _TopBar extends ConsumerWidget {
     required this.streamId,
     required this.qualityLabel,
     required this.onBack,
+    this.onPip,
   });
 
   final String? title;
@@ -906,6 +922,9 @@ class _TopBar extends ConsumerWidget {
   final String? streamId;
   final String? qualityLabel;
   final VoidCallback onBack;
+
+  /// Enter Picture-in-Picture (phone only); null hides the button.
+  final VoidCallback? onPip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1004,6 +1023,12 @@ class _TopBar extends ConsumerWidget {
                     letterSpacing: 1,
                   ),
                 ),
+              ),
+            if (onPip != null)
+              _PlayerButton(
+                tooltip: 'Finestra mobile',
+                onPressed: onPip!,
+                child: const Icon(Icons.picture_in_picture_alt, color: Colors.white),
               ),
             _PlayerButton(
               tooltip: 'Impostazioni',

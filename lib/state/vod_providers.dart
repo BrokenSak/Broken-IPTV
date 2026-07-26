@@ -18,12 +18,6 @@ final vodCategoriesProvider = FutureProvider<List<XtreamCategory>>((ref) async {
   return repo.getCategories();
 });
 
-final vodItemsProvider = FutureProvider.family<List<VodItem>, String>((ref, categoryId) async {
-  final repo = await ref.watch(vodRepositoryProvider.future);
-  if (repo == null) return const [];
-  return repo.getItems(categoryId);
-});
-
 final vodDetailProvider = FutureProvider.family<VodDetail, String>((ref, vodId) async {
   final repo = await ref.watch(vodRepositoryProvider.future);
   if (repo == null) throw Exception('Nessun profilo selezionato');

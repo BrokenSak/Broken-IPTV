@@ -21,6 +21,7 @@ import '../../../state/sync_providers.dart';
 import '../../../state/vod_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/app_dialogs.dart';
+import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
 
 // Shared text styles for settings: **bold** titles, *italic* descriptions.
@@ -329,42 +330,10 @@ class _PlaylistTile extends StatelessWidget {
               ),
             ),
           ),
-          _IconAction(icon: Icons.edit_outlined, color: subFg, onTap: onEdit, tooltip: 'Modifica'),
-          _IconAction(icon: Icons.delete_outline, color: subFg, onTap: onDelete, tooltip: 'Elimina'),
+          IconAction(icon: Icons.edit_outlined, color: subFg, onTap: onEdit, tooltip: 'Modifica'),
+          IconAction(icon: Icons.delete_outline, color: subFg, onTap: onDelete, tooltip: 'Elimina'),
           const SizedBox(width: 4),
         ],
-      ),
-    );
-  }
-}
-
-/// A small icon action (modifica/elimina) that is its own D-pad focus stop, so
-/// a remote can reach it — see [_PlaylistTile].
-class _IconAction extends StatelessWidget {
-  const _IconAction({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.tooltip,
-  });
-
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: tooltip,
-      child: TvFocusable(
-        borderRadius: 12,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: color),
-        ),
       ),
     );
   }

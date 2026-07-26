@@ -1,7 +1,7 @@
 {
-  "build": 12,
-  "version": "1.3.8",
-  "notes": "Risolto il caso in cui alcune liste mostravano le categorie ma non i canali: ora la griglia filtra la lista completa sul dispositivo, così i canali (e i film/serie) compaiono anche con i pannelli che ignorano il filtro per categoria.",
+  "build": 13,
+  "version": "1.4.0",
+  "notes": "Novità: Picture-in-Picture su telefono — premi Home mentre guardi (o l'icona nella barra del player) per continuare in una finestrella. Più pulizia interna e firma dell'app più sicura.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

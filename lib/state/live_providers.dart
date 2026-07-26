@@ -114,12 +114,6 @@ final liveCategoriesProvider = FutureProvider<List<XtreamCategory>>((ref) async 
   return repo.getCategories();
 });
 
-final liveStreamsProvider = FutureProvider.family<List<Channel>, String>((ref, categoryId) async {
-  final repo = await ref.watch(liveRepositoryProvider.future);
-  if (repo == null) return const [];
-  return repo.getChannels(categoryId);
-});
-
 final shortEpgProvider = FutureProvider.family<List<EpgProgram>, String>((ref, streamId) async {
   final repo = await ref.watch(liveRepositoryProvider.future);
   if (repo == null) return const [];

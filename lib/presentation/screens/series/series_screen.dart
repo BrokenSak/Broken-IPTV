@@ -17,6 +17,7 @@ import '../../common/catalog_scaffold.dart';
 import '../../common/error_retry.dart';
 import '../../common/favorite_button.dart';
 import '../../common/grid_metrics.dart';
+import '../../common/remove_button.dart';
 import '../../common/tv_focusable.dart';
 import '../../common/watch_bar.dart';
 
@@ -187,7 +188,7 @@ class _SeriesContinue extends ConsumerWidget {
                     Positioned(
                       top: 0,
                       right: 0,
-                      child: _RemoveButton(
+                      child: RemoveButton(
                         onRemove: () => _confirmRemove(context, ref, p.seriesId!, p.name),
                       ),
                     ),
@@ -226,33 +227,6 @@ Future<void> _confirmRemove(BuildContext context, WidgetRef ref, String seriesId
   );
   if (ok) {
     await ref.read(watchProgressProvider.notifier).removeSeries(seriesId);
-  }
-}
-
-/// Small circular "×" overlay used to remove an item from Continua a guardare.
-/// Works with mouse/touch; long-press on the card is the D-pad/touch fallback.
-class _RemoveButton extends StatelessWidget {
-  const _RemoveButton({required this.onRemove});
-
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.6),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onRemove,
-          child: const Padding(
-            padding: EdgeInsets.all(5),
-            child: Icon(Icons.close, color: Colors.white, size: 18),
-          ),
-        ),
-      ),
-    );
   }
 }
 

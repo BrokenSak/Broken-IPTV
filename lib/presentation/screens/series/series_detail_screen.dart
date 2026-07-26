@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/download_support.dart';
+import '../../../core/format.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/download_item.dart';
 import '../../../data/models/series_item.dart';
@@ -345,7 +346,9 @@ class _EpisodeTile extends ConsumerWidget {
                     if (progress != null) ...[
                       const SizedBox(height: 3),
                       Text(
-                        progress.finished ? 'Visto' : 'Lasciato a ${_fmt(progress.positionMs)}',
+                        progress.finished
+                            ? 'Visto'
+                            : 'Lasciato a ${formatHms(Duration(milliseconds: progress.positionMs))}',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                       ),
                     ],
@@ -385,13 +388,6 @@ class _EpisodeTile extends ConsumerWidget {
     );
   }
 
-  String _fmt(int ms) {
-    final d = Duration(milliseconds: ms);
-    final h = d.inHours;
-    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
 }
 
 /// Compact season picker using the shared glass-styled dropdown.
