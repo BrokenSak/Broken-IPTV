@@ -1,7 +1,7 @@
 {
-  "build": 14,
-  "version": "1.5.0",
-  "notes": "Novità sulle serie: nel player c'è ora la lista episodi (come quella dei canali live) — cambia episodio al volo e cambia stagione con le frecce del telecomando o toccando le frecce in alto su telefono e Windows. Aggiunto anche il tasto Prossimo episodio nei controlli, cosi passi avanti anche a meta puntata.",
+  "build": 15,
+  "version": "1.5.1",
+  "notes": "Lista episodi nel player migliorata: il selettore stagione ora e' il menu a tendina uguale a quello dei canali, e ogni episodio mostra la barra di avanzamento (Visto oppure dove ti eri fermato).",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
