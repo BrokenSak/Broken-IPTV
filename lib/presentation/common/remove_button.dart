@@ -10,17 +10,22 @@ class RemoveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.6),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onRemove,
-          child: const Padding(
-            padding: EdgeInsets.all(5),
-            child: Icon(Icons.close, color: Colors.white, size: 18),
+    // ExcludeFocus: pointer-only control. On Android the InkWell would be a
+    // focusable-but-invisible D-pad stop layered over the tile; a remote
+    // removes via the long-press menu instead.
+    return ExcludeFocus(
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.6),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onRemove,
+            child: const Padding(
+              padding: EdgeInsets.all(5),
+              child: Icon(Icons.close, color: Colors.white, size: 18),
+            ),
           ),
         ),
       ),

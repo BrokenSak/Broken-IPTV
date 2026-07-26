@@ -14,12 +14,18 @@ class IconAction extends StatelessWidget {
     required this.onTap,
     this.color = AppColors.textSecondary,
     this.tooltip,
+    this.ringColor,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final Color color;
   final String? tooltip;
+
+  /// Focus ring override: pass black when the action sits on a white surface
+  /// (e.g. the selected, white-filled playlist row), where the default white
+  /// ring would be invisible.
+  final Color? ringColor;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +34,7 @@ class IconAction extends StatelessWidget {
       label: tooltip,
       child: TvFocusable(
         borderRadius: 12,
+        ringColor: ringColor,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),

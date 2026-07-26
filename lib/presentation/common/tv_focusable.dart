@@ -35,12 +35,18 @@ class TvFocusable extends StatefulWidget {
     this.borderRadius = 16,
     this.autofocus = false,
     this.focusNode,
+    this.ringColor,
   });
 
   final Widget child;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final double borderRadius;
+
+  /// Focus ring colour override. The default white ring disappears on a
+  /// white-filled child (selected playlist, floating player pill): those pass
+  /// black here — "se lo sfondo è bianco, il quadrato è nero" (user rule).
+  final Color? ringColor;
 
   /// Only honoured where a D-pad is expected (see [dpadAutofocusEnabled]).
   final bool autofocus;
@@ -155,7 +161,7 @@ class _TvFocusableState extends State<TvFocusable> {
                   borderRadius: BorderRadius.circular(widget.borderRadius),
                   border: Border.all(
                     color: showRing
-                        ? AppColors.focusRing
+                        ? (widget.ringColor ?? AppColors.focusRing)
                         : (softHint ? Colors.white38 : Colors.transparent),
                     width: 3,
                   ),

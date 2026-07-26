@@ -1,0 +1,331 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:broken_iptv/core/theme/app_theme.dart';
+import 'package:broken_iptv/core/ui_mode.dart';
+import 'package:broken_iptv/data/models/channel.dart';
+import 'package:broken_iptv/data/models/epg_program.dart';
+import 'package:broken_iptv/data/models/series_item.dart';
+import 'package:broken_iptv/data/models/watch_progress.dart';
+import 'package:broken_iptv/data/models/xtream_category.dart';
+import 'package:broken_iptv/data/repositories/live_repository.dart';
+import 'package:broken_iptv/data/repositories/series_repository.dart';
+import 'package:broken_iptv/data/services/device_mode_service.dart';
+import 'package:broken_iptv/data/services/storage_service.dart';
+import 'package:broken_iptv/data/services/xtream_session.dart';
+import 'package:broken_iptv/presentation/common/watch_bar.dart';
+import 'package:broken_iptv/presentation/screens/player/channel_list_overlay.dart';
+import 'package:broken_iptv/presentation/screens/player/episode_list_overlay.dart';
+import 'package:broken_iptv/state/live_providers.dart';
+import 'package:broken_iptv/state/series_providers.dart';
+
+/// Simulated-remote drive of the player's list overlays ("Episodi"/"Canali"):
+/// arrows + OK only, in TV mode, exactly like a Firestick. Written after the
+/// first release of the episode list shipped with bare ListTile/IconButton/
+/// MenuItemButton stops whose focus was invisible on TV ("milioni di cose non
+/// selezionabili e navigabili").
+///
+/// The player screen itself can't be widget-tested on the host (native libmpv
+/// in initState): the overlays are extracted widgets precisely so the remote
+/// path IS testable here.
+
+XtreamSession _fakeSession() =>
+    XtreamSession(host: 'http://fake-host', username: 'u', password: 'p');
+
+const _seriesId = '20';
+
+Episode _ep(String id, int num, String title, int season) => Episode(
+      id: id,
+      title: title,
+      episodeNum: num,
+      season: season,
+      containerExtension: 'mp4',
+    );
+
+class FakeSeriesRepository extends SeriesRepository {
+  FakeSeriesRepository() : super(_fakeSession());
+
+  @override
+  Future<SeriesDetail> getDetail(String seriesId) async => SeriesDetail(
+        seriesId: seriesId,
+        name: 'Serie Test',
+        episodesBySeason: {
+          1: [_ep('e1', 1, 'Uno', 1), _ep('e2', 2, 'Due', 1)],
+          2: [_ep('e3', 1, 'Tre', 2)],
+        },
+      );
+}
+
+class FakeLiveRepository extends LiveRepository {
+  FakeLiveRepository() : super(_fakeSession());
+
+  @override
+  Future<List<XtreamCategory>> getCategories() async => const [
+        XtreamCategory(id: '1', name: 'Sport'),
+        XtreamCategory(id: '2', name: 'News'),
+      ];
+
+  @override
+  Future<List<Channel>> getAllChannels() async => [
+        Channel(streamId: '100', name: 'Canale Uno', categoryId: '1'),
+        Channel(streamId: '200', name: 'Canale Due', categoryId: '2'),
+      ];
+
+  @override
+  Future<List<EpgProgram>> getShortEpg(String streamId, {int limit = 20}) async =>
+      const [];
+}
+
+Future<void> _pressOk(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _press(WidgetTester tester, LogicalKeyboardKey key,
+    [int times = 1]) async {
+  for (var i = 0; i < times; i++) {
+    await tester.sendKeyEvent(key);
+    await tester.pumpAndSettle();
+  }
+}
+
+/// The MaterialApp shell; tests wrap it in their own ProviderScope (the
+/// `Override` type isn't exported by flutter_riverpod 3, so the scope lives at
+/// the call site).
+Widget _shell(Widget overlay) {
+  return MaterialApp(
+    theme: AppTheme.dark,
+    home: Scaffold(body: Stack(children: [overlay])),
+  );
+}
+
+void main() {
+  setUpAll(() async {
+    final dir = Directory.systemTemp.createTempSync('broken_iptv_overlay_test');
+    await StorageService.init(testPath: dir.path);
+  });
+
+  setUp(() {
+    debugDeviceModeOverride = DeviceMode.tv;
+  });
+
+  tearDown(() {
+    debugDeviceModeOverride = null;
+  });
+
+  // NB: Hive writes must run under tester.runAsync — awaiting real IO inside
+  // the widget-test fake clock hangs forever (HANDOFF lesson, burned twice).
+  Future<void> seedProgress() async {
+    await StorageService.watchProgressBox.clear();
+    // e1 watched to the end ("Visto"), e2 left midway ("Lasciato a 0:30:00").
+    await StorageService.watchProgressBox.put(
+      WatchProgress.seriesKey(_seriesId, 'e1'),
+      const WatchProgress(
+        kind: WatchKind.series,
+        vodId: null,
+        seriesId: _seriesId,
+        episodeId: 'e1',
+        episodeLabel: '1. Uno',
+        name: 'Serie Test',
+        imageUrl: null,
+        url: 'http://fake/e1',
+        positionMs: 59 * 60 * 1000,
+        durationMs: 60 * 60 * 1000,
+        updatedAt: 1,
+      ).toMap(),
+    );
+    await StorageService.watchProgressBox.put(
+      WatchProgress.seriesKey(_seriesId, 'e2'),
+      const WatchProgress(
+        kind: WatchKind.series,
+        vodId: null,
+        seriesId: _seriesId,
+        episodeId: 'e2',
+        episodeLabel: '2. Due',
+        name: 'Serie Test',
+        imageUrl: null,
+        url: 'http://fake/e2',
+        positionMs: 30 * 60 * 1000,
+        durationMs: 60 * 60 * 1000,
+        updatedAt: 2,
+      ).toMap(),
+    );
+  }
+
+  group('EpisodeListOverlay (TV remote)', () {
+    testWidgets('shows the watch bar per episode: full = Visto, partial = left off',
+        (tester) async {
+      await tester.runAsync(seedProgress);
+      final selected = <String>[];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+        ],
+        child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e2',
+          fallbackImage: null,
+          onClose: () {},
+          onSelect: (e) => selected.add(e.id),
+        ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1. Uno'), findsOneWidget);
+      expect(find.text('2. Due'), findsOneWidget);
+      // Every row carries the classic progress bar underneath.
+      expect(find.byType(WatchBar), findsNWidgets(2));
+      expect(find.text('Visto'), findsOneWidget);
+      expect(find.textContaining('Lasciato a'), findsOneWidget);
+    });
+
+    testWidgets('OK plays the focused row; arrows move between episodes',
+        (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+        ],
+        child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e1',
+          fallbackImage: null,
+          onClose: () {},
+          onSelect: (e) => selected.add(e.id),
+        ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // The first row autofocuses when the overlay opens: OK plays it.
+      await _pressOk(tester);
+      expect(selected, ['e1'],
+          reason: 'the D-pad must land on the list as the overlay opens');
+
+      // Down: second episode; OK plays it.
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+      await _pressOk(tester);
+      expect(selected, ['e1', 'e2']);
+    });
+
+    testWidgets('season dropdown: reachable with arrows, OK switches season, '
+        'focus lands back on episode 1', (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+        ],
+        child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e2',
+          fallbackImage: null,
+          onClose: () {},
+          onSelect: (e) => selected.add(e.id),
+        ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Up from the first row reaches the header; Left makes sure we are on
+      // the dropdown trigger (not the X), wherever the traversal landed.
+      await _press(tester, LogicalKeyboardKey.arrowUp);
+      await _press(tester, LogicalKeyboardKey.arrowLeft);
+
+      // OK opens the season menu: current entry (Stagione 1) + Stagione 2.
+      await _pressOk(tester);
+      expect(find.text('Stagione 2'), findsOneWidget,
+          reason: 'OK on the trigger must open the season menu');
+
+      // Focus is on the current entry: one Down reaches "Stagione 2", OK picks.
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+      await _pressOk(tester);
+
+      expect(find.text('1. Tre'), findsOneWidget, reason: 'season switched');
+      expect(find.text('1. Uno'), findsNothing);
+
+      // After the switch the focus must land back on the list: OK plays S2E1.
+      await _pressOk(tester);
+      expect(selected, ['e3'],
+          reason: 'after a season change OK must act on the first episode');
+    });
+
+    testWidgets('the X closes the overlay from the remote', (tester) async {
+      var closed = 0;
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+        ],
+        child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e1',
+          fallbackImage: null,
+          onClose: () => closed++,
+          onSelect: (_) {},
+        ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Up to the header, then Right until the X (right-most stop).
+      await _press(tester, LogicalKeyboardKey.arrowUp);
+      await _press(tester, LogicalKeyboardKey.arrowRight, 2);
+      await _pressOk(tester);
+      expect(closed, 1, reason: 'OK on the X must close the overlay');
+    });
+  });
+
+  group('ChannelListOverlay (TV remote)', () {
+    testWidgets('OK zaps to the focused channel; category filter works',
+        (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          liveRepositoryProvider.overrideWith((ref) async => FakeLiveRepository()),
+        ],
+        child: _shell(
+        ChannelListOverlay(
+          currentStreamId: '100',
+          onClose: () {},
+          onSelect: (id, name) => selected.add(id),
+        ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Canale Uno'), findsOneWidget);
+      expect(find.text('Canale Due'), findsOneWidget);
+
+      // First row autofocuses: OK zaps to it.
+      await _pressOk(tester);
+      expect(selected, ['100']);
+
+      // Up to the header, Left onto the category dropdown, OK opens it.
+      await _press(tester, LogicalKeyboardKey.arrowUp);
+      await _press(tester, LogicalKeyboardKey.arrowLeft);
+      await _pressOk(tester);
+      expect(find.text('News'), findsOneWidget, reason: 'menu open');
+
+      // Current entry is "Tutti i canali": two Downs reach "News", OK filters.
+      await _press(tester, LogicalKeyboardKey.arrowDown, 2);
+      await _pressOk(tester);
+
+      expect(find.text('Canale Due'), findsOneWidget);
+      expect(find.text('Canale Uno'), findsNothing,
+          reason: 'the category filter must apply app-side');
+
+      // Focus is back on the (rebuilt) list: OK zaps to the filtered channel.
+      await _pressOk(tester);
+      expect(selected, ['100', '200']);
+    });
+  });
+}

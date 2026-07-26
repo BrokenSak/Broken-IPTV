@@ -309,6 +309,9 @@ class _PlaylistTile extends StatelessWidget {
             child: TvFocusable(
               borderRadius: 14,
               autofocus: autofocus,
+              // The selected row is filled white: the default white focus ring
+              // would vanish on it, so there the ring is black.
+              ringColor: selected ? Colors.black : null,
               onTap: onSelect,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
@@ -330,8 +333,18 @@ class _PlaylistTile extends StatelessWidget {
               ),
             ),
           ),
-          IconAction(icon: Icons.edit_outlined, color: subFg, onTap: onEdit, tooltip: 'Modifica'),
-          IconAction(icon: Icons.delete_outline, color: subFg, onTap: onDelete, tooltip: 'Elimina'),
+          IconAction(
+              icon: Icons.edit_outlined,
+              color: subFg,
+              ringColor: selected ? Colors.black : null,
+              onTap: onEdit,
+              tooltip: 'Modifica'),
+          IconAction(
+              icon: Icons.delete_outline,
+              color: subFg,
+              ringColor: selected ? Colors.black : null,
+              onTap: onDelete,
+              tooltip: 'Elimina'),
           const SizedBox(width: 4),
         ],
       ),
@@ -492,10 +505,15 @@ class _SyncSection extends ConsumerWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Modifica',
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
-                  onPressed: () => context.push('/settings/sync'),
+                // Same action as the tile itself (OK on the tile opens the
+                // sync settings): kept out of the focus traversal so it isn't
+                // a second, invisible D-pad stop nested inside the tile.
+                ExcludeFocus(
+                  child: IconButton(
+                    tooltip: 'Modifica',
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
+                    onPressed: () => context.push('/settings/sync'),
+                  ),
                 ),
               ],
             ),

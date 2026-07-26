@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/ui_mode.dart';
 import '../../data/models/favorite_item.dart';
 import '../../state/favorites_providers.dart';
+import 'tv_focusable.dart';
 
 /// On Android, tiles support long-press to toggle a favorite (there is no
 /// hover to reveal the heart). Returns null on desktop, where the heart
@@ -63,23 +64,33 @@ Future<void> _showContinueOptions(
               ),
             ),
           ),
-          ListTile(
-            // D-pad: give the sheet a focused row so OK works right away.
+          // TvFocusable rows (not bare ListTiles with onTap): on TV the theme
+          // makes the ListTile focus invisible, so the remote had no way to
+          // see which row it was on. The first row autofocuses (policy-gated)
+          // so OK works right away.
+          TvFocusable(
+            borderRadius: 12,
             autofocus: true,
-            leading: Icon(isFav ? Icons.favorite : Icons.favorite_border, color: Colors.white),
-            title: Text(isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'),
             onTap: () {
               ref.read(favoritesProvider.notifier).toggle(favorite);
               Navigator.pop(sheetContext);
             },
+            child: ListTile(
+              leading:
+                  Icon(isFav ? Icons.favorite : Icons.favorite_border, color: Colors.white),
+              title: Text(isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'),
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.delete_outline, color: Colors.white),
-            title: const Text('Rimuovi da Continua a guardare'),
+          TvFocusable(
+            borderRadius: 12,
             onTap: () async {
               Navigator.pop(sheetContext);
               await onRemoveFromContinue();
             },
+            child: const ListTile(
+              leading: Icon(Icons.delete_outline, color: Colors.white),
+              title: Text('Rimuovi da Continua a guardare'),
+            ),
           ),
         ],
       ),
@@ -132,22 +143,27 @@ class FavoriteButton extends ConsumerWidget {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(6),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.55),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () => ref.read(favoritesProvider.notifier).toggle(
-                FavoriteItem(type: type, id: id, name: name, imageUrl: imageUrl),
+    // ExcludeFocus: pointer-only control. On Android the InkWell would be a
+    // focusable-but-invisible D-pad stop layered over the tile; a remote
+    // toggles favourites by holding OK on the tile itself.
+    return ExcludeFocus(
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.55),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => ref.read(favoritesProvider.notifier).toggle(
+                  FavoriteItem(type: type, id: id, name: name, imageUrl: imageUrl),
+                ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                isFav ? Icons.favorite : Icons.favorite_border,
+                color: Colors.white,
+                size: 20,
               ),
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Icon(
-              isFav ? Icons.favorite : Icons.favorite_border,
-              color: Colors.white,
-              size: 20,
             ),
           ),
         ),

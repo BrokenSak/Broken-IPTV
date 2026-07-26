@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,14 +13,13 @@ import '../../../core/fullscreen.dart';
 import '../../../core/pip.dart';
 import '../../../core/playback_activity.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../data/models/channel.dart';
 import '../../../data/models/series_item.dart';
 import '../../../data/models/watch_progress.dart';
 import '../../../state/live_providers.dart';
 import '../../../core/ui_mode.dart';
-import '../../common/glass_dropdown.dart';
 import '../../common/tv_focusable.dart';
-import '../../common/watch_bar.dart';
+import 'channel_list_overlay.dart';
+import 'episode_list_overlay.dart';
 import 'player_keys.dart';
 import 'series_prompts.dart';
 import '../../../state/player_settings_providers.dart';
@@ -407,6 +405,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
     _open(url);
     _poke();
+    _refocusPrimary();
   }
 
   String? get _qualityLabel {
@@ -464,8 +463,32 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _onPipModeChanged(bool inPip) {
     if (inPip && mounted) {
       _hideControls();
-      if (_channelListOpen) setState(() => _channelListOpen = false);
+      if (_channelListOpen || _episodeListOpen) {
+        setState(() {
+          _channelListOpen = false;
+          _episodeListOpen = false;
+        });
+      }
     }
+  }
+
+  void _closeChannelList() {
+    setState(() => _channelListOpen = false);
+    _refocusPrimary();
+  }
+
+  void _closeEpisodeList() {
+    setState(() => _episodeListOpen = false);
+    _refocusPrimary();
+  }
+
+  /// After an overlay closes on TV, the node that had the focus is gone: land
+  /// the D-pad back on the main control, or OK would have no target.
+  void _refocusPrimary() {
+    if (!isTvMode()) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _controlsVisible) _primaryControlNode.requestFocus();
+    });
   }
 
   @override
@@ -710,6 +733,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
     _open(repo.episodeUrl(episode.id, episode.containerExtension));
     _poke();
+    _refocusPrimary();
   }
 
   Widget _buildVideo(VideoAspect aspect) {
@@ -745,8 +769,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       duration: _duration,
       creditsWindow: _creditsWindow,
     );
+    final overlayOpen = _channelListOpen || _episodeListOpen;
     final showRestart = _showRestart && !showNext;
-    final showFloating = showNext || showRestart;
+    // No floating shortcut while a list overlay is open: it would be an extra
+    // D-pad stop *outside* the panel, stranding the focus behind it.
+    final showFloating = (showNext || showRestart) && !overlayOpen;
 
     // The inline "Prossimo episodio" control lives in the bar as a fallback for
     // whenever the floating one isn't up (i.e. not near the end) — otherwise
@@ -776,11 +803,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_channelListOpen) {
-          setState(() => _channelListOpen = false);
+          _closeChannelList();
           return;
         }
         if (_episodeListOpen) {
-          setState(() => _episodeListOpen = false);
+          _closeEpisodeList();
           return;
         }
         if (_controlsVisible) _hideControls();
@@ -851,9 +878,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ignoring: !_controlsVisible,
                   // Hidden controls must not keep the focus either: otherwise a
                   // D-pad press acts on an invisible button, and the root node
-                  // never gets the key that should reveal the menu.
+                  // never gets the key that should reveal the menu. Same while
+                  // a list overlay is open: the D-pad must stay inside the
+                  // panel, not wander onto the buttons behind it.
                   child: ExcludeFocus(
-                    excluding: !_controlsVisible,
+                    excluding: !_controlsVisible || overlayOpen,
                     child: Column(
                     children: [
                       _TopBar(
@@ -930,18 +959,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
               // Live channel list overlay (zap without leaving the player).
               if (_channelListOpen)
-                _ChannelListOverlay(
+                ChannelListOverlay(
                   currentStreamId: _currentStreamId,
-                  onClose: () => setState(() => _channelListOpen = false),
+                  onClose: _closeChannelList,
                   onSelect: _switchChannel,
                 ),
               // Series episode list overlay (switch episode / season in place).
               if (_episodeListOpen && widget.seriesId != null)
-                _EpisodeListOverlay(
+                EpisodeListOverlay(
                   seriesId: widget.seriesId!,
                   currentEpisodeId: _currentEpisodeId,
                   fallbackImage: widget.posterUrl,
-                  onClose: () => setState(() => _episodeListOpen = false),
+                  onClose: _closeEpisodeList,
                   onSelect: (e) => _playEpisode(e, resume: true),
                 ),
             ],
@@ -1127,6 +1156,9 @@ class _FloatingAction extends StatelessWidget {
     return TvFocusable(
       borderRadius: 14,
       focusNode: focusNode,
+      // The pill is white: a white focus ring would vanish on it, so this one
+      // is black (white glow stays, for the dark video behind).
+      ringColor: Colors.black,
       onTap: onPressed,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -1192,9 +1224,10 @@ class _PlayerButton extends StatelessWidget {
   }
 }
 
-/// Audio-track picker. The menu is opened from the [TvFocusable] wrapper (so a
-/// remote can reach it); the inner button is kept out of the focus traversal so
-/// it isn't a second, invisible stop.
+/// Audio-track picker. Same glass menu as [GlassDropdown]: every entry is a
+/// [TvFocusable] (visible ring + OK on TV) and the current track autofocuses
+/// when the menu opens, so the D-pad lands inside it. The old PopupMenuButton
+/// items had invisible focus here (transparent highlight + NoSplash).
 class _AudioMenuButton extends StatefulWidget {
   const _AudioMenuButton({
     required this.tracks,
@@ -1211,43 +1244,62 @@ class _AudioMenuButton extends StatefulWidget {
 }
 
 class _AudioMenuButtonState extends State<_AudioMenuButton> {
-  final _menuKey = GlobalKey<PopupMenuButtonState<AudioTrack>>();
+  final _controller = MenuController();
 
   @override
   Widget build(BuildContext context) {
-    return _PlayerButton(
-      tooltip: 'Lingua audio',
-      onPressed: () => _menuKey.currentState?.showButtonMenu(),
-      child: ExcludeFocus(
-        child: PopupMenuButton<AudioTrack>(
-          key: _menuKey,
-          tooltip: '',
-          padding: EdgeInsets.zero,
-          icon: const Icon(Icons.multitrack_audio, color: Colors.white),
-          color: const Color(0xF01C1C1E),
-          shape: RoundedRectangleBorder(
+    // The entry the D-pad lands on when the menu opens: the current track, or
+    // the first one if nothing matches (autofocus must land somewhere).
+    final focusId = widget.tracks.any((t) => t.id == widget.currentAudioId)
+        ? widget.currentAudioId
+        : (widget.tracks.isEmpty ? null : widget.tracks.first.id);
+
+    return MenuAnchor(
+      controller: _controller,
+      consumeOutsideTap: true,
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(Color(0xF01C1C1E)),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: const BorderSide(color: AppColors.glassBorder),
           ),
-          onSelected: widget.onSelected,
-          itemBuilder: (context) => [
-            for (final t in widget.tracks)
-              PopupMenuItem<AudioTrack>(
-                value: t,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check,
-                      size: 18,
-                      color: t.id == widget.currentAudioId ? Colors.white : Colors.transparent,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(_audioTrackLabel(t), style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-          ],
         ),
+        padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
+      ),
+      menuChildren: [
+        for (final t in widget.tracks)
+          TvFocusable(
+            borderRadius: 10,
+            autofocus: t.id == focusId,
+            onTap: () {
+              _controller.close();
+              widget.onSelected(t);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: t.id == widget.currentAudioId ? Colors.white : Colors.transparent,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(_audioTrackLabel(t), style: const TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+      ],
+      builder: (context, controller, _) => _PlayerButton(
+        tooltip: 'Lingua audio',
+        onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+        child: const Icon(Icons.multitrack_audio, color: Colors.white),
       ),
     );
   }
@@ -1625,385 +1677,3 @@ class _SkipButton extends StatelessWidget {
     );
   }
 }
-
-/// Bottom-left overlay listing live channels so you can zap without leaving the
-/// player. It also lets you navigate between categories. A tap on the dim area
-/// closes it; picking a channel switches playback in place.
-class _ChannelListOverlay extends ConsumerStatefulWidget {
-  const _ChannelListOverlay({
-    required this.currentStreamId,
-    required this.onClose,
-    required this.onSelect,
-  });
-
-  final String? currentStreamId;
-  final VoidCallback onClose;
-  final void Function(String streamId, String name) onSelect;
-
-  @override
-  ConsumerState<_ChannelListOverlay> createState() => _ChannelListOverlayState();
-}
-
-class _ChannelListOverlayState extends ConsumerState<_ChannelListOverlay> {
-  // null = "Tutti i canali" (all channels across categories).
-  String? _catId;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final panelW = (size.width * 0.9).clamp(260.0, 420.0);
-    // Sit above the bottom controls (bottomOffset) and below the top bar.
-    const bottomOffset = 140.0;
-    final panelH = (size.height - bottomOffset - 96).clamp(220.0, 560.0);
-
-    final cats = ref.watch(liveCategoriesProvider).value ?? const [];
-    // Always read the full channel list and filter by category on the device:
-    // some panels ignore category_id and return an empty per-category list (see
-    // the note in live_tv's _ChannelGrid), which left the overlay blank.
-    final channelsAsync = ref.watch(allChannelsProvider);
-
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          // Tap outside the panel to dismiss.
-          Positioned.fill(
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onClose),
-          ),
-          Positioned(
-            left: 12,
-            bottom: bottomOffset,
-            width: panelW,
-            height: panelH,
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header: category dropdown (categories can be many) + close.
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 6, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GlassDropdown<String?>(
-                            value: _catId,
-                            expand: true,
-                            onChanged: (v) => setState(() => _catId = v),
-                            items: [
-                              const GlassDropdownEntry<String?>(
-                                value: null,
-                                label: 'Tutti i canali',
-                              ),
-                              for (final c in cats)
-                                GlassDropdownEntry<String?>(value: c.id, label: c.name),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: widget.onClose,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: channelsAsync.when(
-                      data: (all) {
-                        final list = _catId == null
-                            ? all
-                            : all.where((c) => c.categoryId == _catId).toList();
-                        if (list.isEmpty) {
-                          return const Center(
-                            child: Text('Nessun canale.',
-                                style: TextStyle(color: AppColors.textSecondary)),
-                          );
-                        }
-                        return ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: list.length,
-                          itemBuilder: (context, index) {
-                            final Channel c = list[index];
-                            final selected = c.streamId == widget.currentStreamId;
-                            return ListTile(
-                              dense: true,
-                              // D-pad: enter the list right away when the
-                              // overlay opens (no effect on touch/mouse).
-                              autofocus: index == 0 && Platform.isAndroid,
-                              selected: selected,
-                              selectedTileColor: Colors.white.withValues(alpha: 0.08),
-                              leading: SizedBox(
-                                width: 42,
-                                height: 42,
-                                child: c.logoUrl != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: c.logoUrl!,
-                                        fit: BoxFit.contain,
-                                        errorWidget: (_, _, _) =>
-                                            const Icon(Icons.tv, color: Colors.white54),
-                                      )
-                                    : const Icon(Icons.tv, color: Colors.white54),
-                              ),
-                              title: Text(
-                                c.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: selected ? Colors.white : AppColors.textPrimary,
-                                  fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-                                ),
-                              ),
-                              trailing: selected
-                                  ? const Icon(Icons.equalizer, color: Colors.white, size: 18)
-                                  : null,
-                              onTap: () => widget.onSelect(c.streamId, c.name),
-                            );
-                          },
-                        );
-                      },
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text('$e', style: const TextStyle(color: AppColors.textSecondary)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Bottom-left overlay listing the episodes of the series being played, so you
-/// can switch episode — or season — without leaving the player. The on-demand
-/// twin of [_ChannelListOverlay].
-///
-/// The season selector is the **same glass dropdown** as the channel list's
-/// category picker; each row carries a **watch bar** (empty / partial / full)
-/// so you can see, at a glance, what you've finished and where you left off.
-class _EpisodeListOverlay extends ConsumerStatefulWidget {
-  const _EpisodeListOverlay({
-    required this.seriesId,
-    required this.currentEpisodeId,
-    required this.fallbackImage,
-    required this.onClose,
-    required this.onSelect,
-  });
-
-  final String seriesId;
-  final String? currentEpisodeId;
-  final String? fallbackImage;
-  final VoidCallback onClose;
-  final void Function(Episode episode) onSelect;
-
-  @override
-  ConsumerState<_EpisodeListOverlay> createState() => _EpisodeListOverlayState();
-}
-
-class _EpisodeListOverlayState extends ConsumerState<_EpisodeListOverlay> {
-  int? _season;
-
-  int? _seasonOf(SeriesDetail detail, String? episodeId) {
-    if (episodeId == null) return null;
-    for (final entry in detail.episodesBySeason.entries) {
-      if (entry.value.any((e) => e.id == episodeId)) return entry.key;
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final panelW = (size.width * 0.9).clamp(260.0, 460.0);
-    // Sit above the bottom controls (bottomOffset) and below the top bar.
-    const bottomOffset = 140.0;
-    final panelH = (size.height - bottomOffset - 96).clamp(220.0, 560.0);
-
-    final detailAsync = ref.watch(seriesDetailProvider(widget.seriesId));
-    // Rebuild the tiles' watch bars as progress is saved while playing.
-    ref.watch(watchProgressProvider);
-    final progressBy = ref.read(watchProgressProvider.notifier);
-
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          // Tap outside the panel to dismiss.
-          Positioned.fill(
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onClose),
-          ),
-          Positioned(
-            left: 12,
-            bottom: bottomOffset,
-            width: panelW,
-            height: panelH,
-            child: detailAsync.when(
-              loading: () => _panel(const Center(child: CircularProgressIndicator())),
-              error: (e, _) => _panel(Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('$e', style: const TextStyle(color: AppColors.textSecondary)),
-                ),
-              )),
-              data: (detail) {
-                final seasons = detail.episodesBySeason.keys.toList()..sort();
-                if (seasons.isEmpty) {
-                  return _panel(const Center(
-                    child: Text('Nessun episodio.',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                  ));
-                }
-                // Open on the season of the episode being watched; fall back to
-                // the first if it's not found (or nothing is playing yet).
-                _season ??= _seasonOf(detail, widget.currentEpisodeId) ?? seasons.first;
-                final season = seasons.contains(_season) ? _season! : seasons.first;
-                final episodes = detail.episodesBySeason[season] ?? const <Episode>[];
-
-                return _panel(Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header: season dropdown (same as the channel list's) + close.
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 6, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GlassDropdown<int>(
-                              value: season,
-                              expand: true,
-                              leadingIcon: Icons.subscriptions_outlined,
-                              onChanged: (v) => setState(() => _season = v),
-                              items: [
-                                for (final s in seasons)
-                                  GlassDropdownEntry<int>(
-                                    value: s,
-                                    label: 'Stagione $s',
-                                    trailing: '${detail.episodesBySeason[s]!.length} ep.',
-                                  ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white),
-                            onPressed: widget.onClose,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.builder(
-                        // Re-keyed per season so changing season rebuilds the
-                        // list from scratch — resetting the scroll to the top
-                        // and re-firing the first tile's autofocus (D-pad).
-                        key: ValueKey(season),
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: episodes.length,
-                        itemBuilder: (context, index) {
-                          final Episode e = episodes[index];
-                          final selected = e.id == widget.currentEpisodeId;
-                          final image = e.imageUrl ?? widget.fallbackImage;
-                          final progress = progressBy.forEpisode(widget.seriesId, e.id);
-                          return ListTile(
-                            // Uniform row height (and top-aligned thumbnail)
-                            // whether or not there's a "left off at" line.
-                            isThreeLine: true,
-                            // D-pad: enter the list right away when the overlay
-                            // opens (no effect on touch/mouse).
-                            autofocus: index == 0 && Platform.isAndroid,
-                            selected: selected,
-                            selectedTileColor: Colors.white.withValues(alpha: 0.08),
-                            leading: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: SizedBox(
-                                width: 64,
-                                height: 40,
-                                child: image != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: image,
-                                        fit: BoxFit.cover,
-                                        errorWidget: (_, _, _) => const ColoredBox(
-                                          color: AppColors.surface,
-                                          child: Icon(Icons.play_circle_outline,
-                                              color: Colors.white54, size: 20),
-                                        ),
-                                      )
-                                    : const ColoredBox(
-                                        color: AppColors.surface,
-                                        child: Icon(Icons.play_circle_outline,
-                                            color: Colors.white54, size: 20),
-                                      ),
-                              ),
-                            ),
-                            title: Text(
-                              '${e.episodeNum}. ${e.title}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: selected ? Colors.white : AppColors.textPrimary,
-                                fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-                              ),
-                            ),
-                            // "La classica barra sotto": how much of the episode
-                            // you've watched, with where you left off / "Visto".
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  WatchBar(fraction: progress?.fraction ?? 0),
-                                  if (progress != null) ...[
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      progress.finished
-                                          ? 'Visto'
-                                          : 'Lasciato a ${formatHms(Duration(milliseconds: progress.positionMs))}',
-                                      style: const TextStyle(
-                                          color: AppColors.textSecondary, fontSize: 11),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            trailing: selected
-                                ? const Icon(Icons.equalizer, color: Colors.white, size: 18)
-                                : null,
-                            onTap: () => widget.onSelect(e),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ));
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _panel(Widget child) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: child,
-    );
-  }
-}
-
