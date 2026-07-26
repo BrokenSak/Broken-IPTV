@@ -21,8 +21,10 @@ import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/data/services/xtream_session.dart';
 import 'package:broken_iptv/presentation/screens/home/home_screen.dart';
 import 'package:broken_iptv/presentation/screens/live_tv/live_tv_screen.dart';
+import 'package:broken_iptv/presentation/screens/series/series_detail_screen.dart';
 import 'package:broken_iptv/presentation/screens/series/series_screen.dart';
 import 'package:broken_iptv/presentation/screens/settings/settings_screen.dart';
+import 'package:broken_iptv/presentation/screens/vod/vod_detail_screen.dart';
 import 'package:broken_iptv/presentation/screens/vod/vod_screen.dart';
 import 'package:broken_iptv/state/live_providers.dart';
 import 'package:broken_iptv/state/player_settings_providers.dart';
@@ -77,6 +79,13 @@ class FakeVodRepository extends VodRepository {
 
   @override
   Future<List<VodItem>> getAllItems() async => getItems('1');
+
+  @override
+  Future<VodDetail> getDetail(String vodId) async => VodDetail(
+        streamId: vodId,
+        name: 'Film Test',
+        containerExtension: 'mp4',
+      );
 }
 
 class FakeSeriesRepository extends SeriesRepository {
@@ -92,6 +101,23 @@ class FakeSeriesRepository extends SeriesRepository {
 
   @override
   Future<List<SeriesItem>> getAllItems() async => getItems('1');
+
+  @override
+  Future<SeriesDetail> getDetail(String seriesId) async => SeriesDetail(
+        seriesId: seriesId,
+        name: 'Serie Test',
+        episodesBySeason: {
+          1: [
+            const Episode(
+              id: 'e1',
+              title: 'Uno',
+              episodeNum: 1,
+              season: 1,
+              containerExtension: 'mp4',
+            ),
+          ],
+        },
+      );
 }
 
 class _FixedSelectedProfileId extends SelectedProfileIdNotifier {
@@ -255,6 +281,41 @@ void main() {
     await _pressOk(tester);
 
     expect(find.text('STUB /series/20'), findsOneWidget);
+  });
+
+  testWidgets('dettaglio film: "Guarda" è focusato all\'arrivo, OK apre il player',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        vodRepositoryProvider.overrideWith((ref) async => FakeVodRepository()),
+      ],
+      child: _shell(const VodDetailScreen(vodId: '10')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Guarda'), findsOneWidget);
+
+    // The play button (TvFocusable, black ring on the white pill) autofocuses:
+    // OK must start playback with no arrow pressed first.
+    await _pressOk(tester);
+    expect(find.textContaining('STUB /player'), findsOneWidget,
+        reason: 'OK on the focused Guarda button must open the player');
+  });
+
+  testWidgets('dettaglio serie: OK sul primo episodio apre il player',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+      ],
+      child: _shell(const SeriesDetailScreen(seriesId: '20')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Uno'), findsOneWidget);
+
+    // The first episode tile autofocuses: OK plays it.
+    await _pressOk(tester);
+    expect(find.textContaining('STUB /player'), findsOneWidget);
+    expect(find.textContaining('episodeId=e1'), findsOneWidget);
   });
 
   testWidgets('impostazioni: arrows reach the aspect chips, OK applies one',

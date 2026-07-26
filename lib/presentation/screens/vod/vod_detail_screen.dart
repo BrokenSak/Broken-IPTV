@@ -11,6 +11,7 @@ import '../../../data/models/vod_item.dart';
 import '../../../state/vod_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/download_button.dart';
+import '../../common/tv_focusable.dart';
 import '../../common/watch_bar.dart';
 
 class VodDetailScreen extends ConsumerWidget {
@@ -102,17 +103,38 @@ class VodDetailScreen extends ConsumerWidget {
                         runSpacing: 12,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          ElevatedButton.icon(
+                          // TvFocusable + ExcludeFocus inner button: one D-pad
+                          // stop with a visible ring (bare Material buttons
+                          // have invisible focus with this theme). The play
+                          // button is white → black ring.
+                          TvFocusable(
+                            borderRadius: 14,
                             autofocus: true,
-                            onPressed: () => _play(context, ref, movie, resumeMs: progress?.positionMs ?? 0),
-                            icon: const Icon(Icons.play_arrow),
-                            label: Text(progress != null && !progress.finished ? 'Riprendi' : 'Guarda'),
+                            ringColor: Colors.black,
+                            onTap: () => _play(context, ref, movie,
+                                resumeMs: progress?.positionMs ?? 0),
+                            child: ExcludeFocus(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _play(context, ref, movie,
+                                    resumeMs: progress?.positionMs ?? 0),
+                                icon: const Icon(Icons.play_arrow),
+                                label: Text(progress != null && !progress.finished
+                                    ? 'Riprendi'
+                                    : 'Guarda'),
+                              ),
+                            ),
                           ),
                           if (progress != null && !progress.finished)
-                            OutlinedButton.icon(
-                              onPressed: () => _play(context, ref, movie, resumeMs: 0),
-                              icon: const Icon(Icons.replay),
-                              label: const Text('Dall\'inizio'),
+                            TvFocusable(
+                              borderRadius: 14,
+                              onTap: () => _play(context, ref, movie, resumeMs: 0),
+                              child: ExcludeFocus(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _play(context, ref, movie, resumeMs: 0),
+                                  icon: const Icon(Icons.replay),
+                                  label: const Text('Dall\'inizio'),
+                                ),
+                              ),
                             ),
                           // Downloads: phone (touch) mode on the APK only.
                           if (downloadsSupported()) _downloadButton(ref, movie),

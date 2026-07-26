@@ -1,7 +1,7 @@
 {
-  "build": 16,
-  "version": "1.5.2",
-  "notes": "Telecomando sistemato ovunque nel player: nella lista episodi e canali ogni voce, il menu stagioni/categorie, la lingua audio e il tasto chiudi ora si selezionano col telecomando e mostrano sempre il riquadro bianco di selezione (nero sugli elementi bianchi).",
+  "build": 17,
+  "version": "1.5.3",
+  "notes": "Telecomando a posto in TUTTA l'app: riquadro di selezione visibile ovunque (nero sugli elementi bianchi) — liste episodi/canali nel player, menu stagioni/lingua audio, finestre di conferma, Guarda/Riprendi nei dettagli, Salva playlist, interruttore sottotitoli e tutte le opzioni delle Impostazioni.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

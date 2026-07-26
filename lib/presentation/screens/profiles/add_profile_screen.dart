@@ -234,15 +234,26 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('Salva'),
+            // One D-pad stop with a visible (black-on-white) ring; the inner
+            // button is not a second focus stop.
+            TvFocusable(
+              borderRadius: 14,
+              ringColor: Colors.black,
+              onTap: () {
+                if (!_saving) _save();
+              },
+              child: ExcludeFocus(
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Salva'),
+                ),
+              ),
             ),
           ],
         ),

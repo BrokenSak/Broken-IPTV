@@ -169,6 +169,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Expanded(
                   child: TvFocusable(
+                    // Black ring on the white (selected) chip — see §7.
+                    ringColor: _currentMode == DeviceMode.tv ? Colors.black : null,
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
                   ),
@@ -176,6 +178,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: TvFocusable(
+                    ringColor: _currentMode == DeviceMode.touch ? Colors.black : null,
                     onTap: () => _setMode(DeviceMode.touch),
                     child: _ModeChip(label: 'Telefono / Tablet', selected: _currentMode == DeviceMode.touch),
                   ),
@@ -197,6 +200,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
+                    ringColor: ref.watch(playerSettingsProvider).aspect == aspect
+                        ? Colors.black
+                        : null,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setAspect(aspect),
                     child: _ModeChip(
                       label: aspect.label,
@@ -209,13 +215,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.subtitles_outlined),
-            title: const Text('Sottotitoli', style: _kItemTitle),
-            subtitle: const Text('Disattivati per impostazione predefinita', style: _kItemDesc),
-            value: ref.watch(playerSettingsProvider).subtitlesEnabled,
-            onChanged: (v) => ref.read(playerSettingsProvider.notifier).setSubtitlesEnabled(v),
+          // TvFocusable wrapper: a bare SwitchListTile takes D-pad focus with
+          // nothing visible (transparent highlight). OK toggles the switch;
+          // the inner tile stays tappable for touch/mouse but is not a second
+          // focus stop.
+          TvFocusable(
+            borderRadius: 14,
+            onTap: () => ref.read(playerSettingsProvider.notifier).setSubtitlesEnabled(
+                !ref.read(playerSettingsProvider).subtitlesEnabled),
+            child: ExcludeFocus(
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.subtitles_outlined),
+                title: const Text('Sottotitoli', style: _kItemTitle),
+                subtitle:
+                    const Text('Disattivati per impostazione predefinita', style: _kItemDesc),
+                value: ref.watch(playerSettingsProvider).subtitlesEnabled,
+                onChanged: (v) => ref.read(playerSettingsProvider.notifier).setSubtitlesEnabled(v),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           const ListTile(
@@ -230,6 +248,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
+                    ringColor: ref.watch(playerSettingsProvider).skipSeconds == s
+                        ? Colors.black
+                        : null,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setSkipSeconds(s),
                     child: _ModeChip(
                       label: '$s s',

@@ -37,9 +37,19 @@ class _LiveTvScreenState extends ConsumerState<LiveTvScreen> {
         title: 'TV',
         onSearch: (q) {},
         body: Center(
-          child: ElevatedButton(
-            onPressed: () => context.push('/settings'),
-            child: const Text('Seleziona una playlist dalle Impostazioni'),
+          // One D-pad stop with a visible (black-on-white) ring; the inner
+          // button is not a second focus stop.
+          child: TvFocusable(
+            borderRadius: 14,
+            autofocus: true,
+            ringColor: Colors.black,
+            onTap: () => context.push('/settings'),
+            child: ExcludeFocus(
+              child: ElevatedButton(
+                onPressed: () => context.push('/settings'),
+                child: const Text('Seleziona una playlist dalle Impostazioni'),
+              ),
+            ),
           ),
         ),
       );

@@ -90,14 +90,21 @@ class _EmptyState extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            // D-pad: the fresh-install flow lands here right after the device
-            // picker — the remote needs a focused button to press OK on.
-            // Invisible on touch (focus highlights only show in keyboard mode).
+          // D-pad: the fresh-install flow lands here right after the device
+          // picker — the remote needs a focused button to press OK on, WITH a
+          // visible ring (black: the button is white). One focus stop only.
+          TvFocusable(
+            borderRadius: 14,
             autofocus: true,
-            onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('Aggiungi playlist'),
+            ringColor: Colors.black,
+            onTap: onAdd,
+            child: ExcludeFocus(
+              child: ElevatedButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add),
+                label: const Text('Aggiungi playlist'),
+              ),
+            ),
           ),
         ],
       ),

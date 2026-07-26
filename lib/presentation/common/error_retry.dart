@@ -31,11 +31,17 @@ class ErrorRetry extends StatelessWidget {
             TvFocusable(
               autofocus: true,
               borderRadius: 14,
+              // The button is white: black ring (white would vanish on it).
+              ringColor: Colors.black,
               onTap: onRetry,
-              child: ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Riprova'),
+              // ExcludeFocus: the inner button must not be a SECOND, invisible
+              // focus stop nested in the TvFocusable (mouse clicks still land).
+              child: ExcludeFocus(
+                child: ElevatedButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Riprova'),
+                ),
               ),
             ),
           ],
