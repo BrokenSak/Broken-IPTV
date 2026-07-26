@@ -152,6 +152,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Live channel-list overlay (zap without leaving the player).
   bool _channelListOpen = false;
 
+  // Series episode-list overlay: switch episode / season without leaving the
+  // player. The on-demand equivalent of the live channel list.
+  bool _episodeListOpen = false;
+
   /// The control the D-pad lands on when the menu opens (play/pause, or the
   /// channel list button on live, which has no play/pause).
   final FocusNode _primaryControlNode = FocusNode(debugLabel: 'player.primary');
@@ -515,9 +519,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 5), () {
-      // Keep controls (and the bottom-left "Canali" button) visible while the
-      // channel list is open, and while paused (you want the play button).
-      if (mounted && _playing && !_channelListOpen) {
+      // Keep controls (and the bottom-left "Canali"/"Episodi" button) visible
+      // while a list overlay is open, and while paused (you want the play
+      // button).
+      if (mounted && _playing && !_channelListOpen && !_episodeListOpen) {
         _hideControls();
       }
     });
@@ -674,19 +679,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _playNextEpisode() {
     final next = _findNextEpisode();
-    if (next == null) return;
+    if (next != null) _playEpisode(next);
+  }
+
+  /// Switches playback to [episode] in place — from the floating "Prossimo
+  /// episodio" shortcut, the inline control, or the episode-list overlay.
+  ///
+  /// [resume] restores that episode's own saved position: the list may be
+  /// re-opening a half-watched one, so it passes true; the automatic "next
+  /// episode" at the end of one starts the following from the beginning.
+  void _playEpisode(Episode episode, {bool resume = false}) {
     final repo = ref.read(seriesRepositoryProvider).value;
     if (repo == null) return;
     _maybeSaveProgress(force: true);
+    int? pending;
+    if (resume && widget.seriesId != null) {
+      final p = _watchProgress.forEpisode(widget.seriesId!, episode.id);
+      if (p != null && !p.finished && p.positionMs > 5000) pending = p.positionMs;
+    }
     setState(() {
-      _currentEpisodeId = next.id;
-      _currentEpisodeLabel = '${next.episodeNum}. ${next.title}';
+      _episodeListOpen = false;
+      _currentEpisodeId = episode.id;
+      _currentEpisodeLabel = '${episode.episodeNum}. ${episode.title}';
       _title = _currentEpisodeLabel;
       _lastSavedMs = 0;
+      _pendingResumeMs = pending;
       _position = Duration.zero;
       _duration = Duration.zero;
     });
-    _open(repo.episodeUrl(next.id, next.containerExtension));
+    _open(repo.episodeUrl(episode.id, episode.containerExtension));
     _poke();
   }
 
@@ -726,6 +747,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final showRestart = _showRestart && !showNext;
     final showFloating = showNext || showRestart;
 
+    // The inline "Prossimo episodio" control lives in the bar as a fallback for
+    // whenever the floating one isn't up (i.e. not near the end) — otherwise
+    // there's no way to jump to the next episode mid-play (user request).
+    final showInlineNext = hasNext && !showNext;
+
     // On TV, auto-focus ONLY "Prossimo episodio" (so it's a one-press action
     // at the end). NOT "Ricomincia": auto-focusing it would mean that when the
     // controls hide after 5s, a stray OK restarts the video by mistake. The
@@ -745,11 +771,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // Back (TV remote / Android) peels one layer at a time: channel overlay,
       // then the controls — closing the menu is Back's job, since OK now
       // presses the focused button. Only with nothing open does it leave.
-      canPop: !_channelListOpen && !_controlsVisible,
+      canPop: !_channelListOpen && !_episodeListOpen && !_controlsVisible,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_channelListOpen) {
           setState(() => _channelListOpen = false);
+          return;
+        }
+        if (_episodeListOpen) {
+          setState(() => _episodeListOpen = false);
           return;
         }
         if (_controlsVisible) _hideControls();
@@ -841,6 +871,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         onChannelList: _isLive
                             ? () => setState(() => _channelListOpen = !_channelListOpen)
                             : null,
+                        episodeListOpen: _episodeListOpen,
+                        onEpisodeList: _isSeries
+                            ? () => setState(() => _episodeListOpen = !_episodeListOpen)
+                            : null,
+                        onNextEpisode: showInlineNext ? _playNextEpisode : null,
                         audioTracks: _audioTracks,
                         currentAudioId: _currentAudioId,
                         onSelectAudio: _selectAudio,
@@ -898,6 +933,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   currentStreamId: _currentStreamId,
                   onClose: () => setState(() => _channelListOpen = false),
                   onSelect: _switchChannel,
+                ),
+              // Series episode list overlay (switch episode / season in place).
+              if (_episodeListOpen && widget.seriesId != null)
+                _EpisodeListOverlay(
+                  seriesId: widget.seriesId!,
+                  currentEpisodeId: _currentEpisodeId,
+                  fallbackImage: widget.posterUrl,
+                  onClose: () => setState(() => _episodeListOpen = false),
+                  onSelect: (e) => _playEpisode(e, resume: true),
                 ),
             ],
           ),
@@ -1315,6 +1359,9 @@ class _ControlsPanel extends StatelessWidget {
     required this.onSpeed,
     required this.channelListOpen,
     required this.onChannelList,
+    required this.episodeListOpen,
+    required this.onEpisodeList,
+    required this.onNextEpisode,
     required this.audioTracks,
     required this.currentAudioId,
     required this.onSelectAudio,
@@ -1348,6 +1395,14 @@ class _ControlsPanel extends StatelessWidget {
   /// Live channel list (only for live). Null hides the "Canali" button.
   final bool channelListOpen;
   final VoidCallback? onChannelList;
+
+  /// Series episode list (only for series). Null hides the "Episodi" button.
+  final bool episodeListOpen;
+  final VoidCallback? onEpisodeList;
+
+  /// One-tap "Prossimo episodio" in the bar. Null hides it — it only shows
+  /// when the floating shortcut isn't up (see showInlineNext in the player).
+  final VoidCallback? onNextEpisode;
 
   final List<AudioTrack> audioTracks;
   final String? currentAudioId;
@@ -1403,6 +1458,24 @@ class _ControlsPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+              // Series episode list opener (bottom-left, mirrors "Canali").
+              if (onEpisodeList != null)
+                _PlayerButton(
+                  onPressed: onEpisodeList!,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        episodeListOpen ? Icons.close : Icons.video_library_outlined,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('Episodi',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               // Skip back/forward (on-demand content only).
               if (!isLive)
                 _SkipButton(
@@ -1427,6 +1500,14 @@ class _ControlsPanel extends StatelessWidget {
                   seconds: skipSeconds,
                   forward: true,
                   onPressed: onSkipForward,
+                ),
+              // One-tap next episode: the in-bar fallback for when the floating
+              // "Prossimo episodio" isn't showing (not near the end).
+              if (onNextEpisode != null)
+                _PlayerButton(
+                  tooltip: 'Prossimo episodio',
+                  onPressed: onNextEpisode!,
+                  child: const Icon(Icons.skip_next, color: Colors.white, size: 30),
                 ),
               // On Android the hardware keys (phone/remote) drive the system
               // volume, so the in-app mute + slider only exist on desktop.
@@ -1698,6 +1779,315 @@ class _ChannelListOverlayState extends ConsumerState<_ChannelListOverlay> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Bottom-left overlay listing the episodes of the series being played, so you
+/// can switch episode — or season — without leaving the player. The on-demand
+/// twin of [_ChannelListOverlay].
+///
+/// Season changes with the D-pad **Left/Right on TV** (handled above the tiles,
+/// so it works wherever the focus sits in the list, while Up/Down still move
+/// through episodes and OK plays one) and with the on-screen **‹ › arrows on
+/// phone/desktop**.
+class _EpisodeListOverlay extends ConsumerStatefulWidget {
+  const _EpisodeListOverlay({
+    required this.seriesId,
+    required this.currentEpisodeId,
+    required this.fallbackImage,
+    required this.onClose,
+    required this.onSelect,
+  });
+
+  final String seriesId;
+  final String? currentEpisodeId;
+  final String? fallbackImage;
+  final VoidCallback onClose;
+  final void Function(Episode episode) onSelect;
+
+  @override
+  ConsumerState<_EpisodeListOverlay> createState() => _EpisodeListOverlayState();
+}
+
+class _EpisodeListOverlayState extends ConsumerState<_EpisodeListOverlay> {
+  int? _season;
+
+  int? _seasonOf(SeriesDetail detail, String? episodeId) {
+    if (episodeId == null) return null;
+    for (final entry in detail.episodesBySeason.entries) {
+      if (entry.value.any((e) => e.id == episodeId)) return entry.key;
+    }
+    return null;
+  }
+
+  void _stepSeason(int dir, List<int> seasons) {
+    final i = seasons.indexOf(_season ?? seasons.first);
+    final ni = i + dir;
+    if (i < 0 || ni < 0 || ni >= seasons.length) return;
+    setState(() => _season = seasons[ni]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final panelW = (size.width * 0.9).clamp(260.0, 460.0);
+    // Sit above the bottom controls (bottomOffset) and below the top bar.
+    const bottomOffset = 140.0;
+    final panelH = (size.height - bottomOffset - 96).clamp(220.0, 560.0);
+
+    final detailAsync = ref.watch(seriesDetailProvider(widget.seriesId));
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          // Tap outside the panel to dismiss.
+          Positioned.fill(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onClose),
+          ),
+          Positioned(
+            left: 12,
+            bottom: bottomOffset,
+            width: panelW,
+            height: panelH,
+            child: detailAsync.when(
+              loading: () => _panel(const Center(child: CircularProgressIndicator())),
+              error: (e, _) => _panel(Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('$e', style: const TextStyle(color: AppColors.textSecondary)),
+                ),
+              )),
+              data: (detail) {
+                final seasons = detail.episodesBySeason.keys.toList()..sort();
+                if (seasons.isEmpty) {
+                  return _panel(const Center(
+                    child: Text('Nessun episodio.',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  ));
+                }
+                // Open on the season of the episode being watched; fall back to
+                // the first if it's not found (or nothing is playing yet).
+                _season ??= _seasonOf(detail, widget.currentEpisodeId) ?? seasons.first;
+                final season = seasons.contains(_season) ? _season! : seasons.first;
+                final episodes = detail.episodesBySeason[season] ?? const <Episode>[];
+
+                Widget panel = _panel(Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header: season stepper (‹ › arrows) + close.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _SeasonStepper(
+                              seasons: seasons,
+                              selected: season,
+                              episodeCount: episodes.length,
+                              onStep: (dir) => _stepSeason(dir, seasons),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: widget.onClose,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.builder(
+                        // Re-keyed per season so changing season rebuilds the
+                        // list from scratch — which re-fires the first tile's
+                        // autofocus, re-landing the D-pad on episode 1.
+                        key: ValueKey(season),
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: episodes.length,
+                        itemBuilder: (context, index) {
+                          final Episode e = episodes[index];
+                          final selected = e.id == widget.currentEpisodeId;
+                          final image = e.imageUrl ?? widget.fallbackImage;
+                          return ListTile(
+                            dense: true,
+                            // D-pad: enter the list right away when the overlay
+                            // opens (no effect on touch/mouse).
+                            autofocus: index == 0 && Platform.isAndroid,
+                            selected: selected,
+                            selectedTileColor: Colors.white.withValues(alpha: 0.08),
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: SizedBox(
+                                width: 64,
+                                height: 40,
+                                child: image != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: image,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, _, _) => const ColoredBox(
+                                          color: AppColors.surface,
+                                          child: Icon(Icons.play_circle_outline,
+                                              color: Colors.white54, size: 20),
+                                        ),
+                                      )
+                                    : const ColoredBox(
+                                        color: AppColors.surface,
+                                        child: Icon(Icons.play_circle_outline,
+                                            color: Colors.white54, size: 20),
+                                      ),
+                              ),
+                            ),
+                            title: Text(
+                              '${e.episodeNum}. ${e.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: selected ? Colors.white : AppColors.textPrimary,
+                                fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+                              ),
+                            ),
+                            trailing: selected
+                                ? const Icon(Icons.equalizer, color: Colors.white, size: 18)
+                                : null,
+                            onTap: () => widget.onSelect(e),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ));
+
+                // TV: intercept Left/Right for season stepping above the tiles,
+                // so it beats the default directional focus traversal. Up/Down
+                // and OK bubble on to the list. Not on phone/desktop (the ‹ ›
+                // arrows are tappable there, and Windows suppresses the arrows).
+                if (isTvMode()) {
+                  panel = Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    onKeyEvent: (node, event) {
+                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                        _stepSeason(-1, seasons);
+                        return KeyEventResult.handled;
+                      }
+                      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                        _stepSeason(1, seasons);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: panel,
+                  );
+                }
+                return panel;
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _panel(Widget child) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Season selector for the in-player episode list: a centered "Stagione N /
+/// n ep." flanked by ‹ › arrows. On phone/desktop the arrows are tappable; on
+/// TV they are indicators and the season changes with the D-pad Left/Right
+/// (see [_EpisodeListOverlay]). Each arrow dims at the first/last season.
+class _SeasonStepper extends StatelessWidget {
+  const _SeasonStepper({
+    required this.seasons,
+    required this.selected,
+    required this.episodeCount,
+    required this.onStep,
+  });
+
+  final List<int> seasons;
+  final int selected;
+  final int episodeCount;
+  final ValueChanged<int> onStep;
+
+  @override
+  Widget build(BuildContext context) {
+    final i = seasons.indexOf(selected);
+    final hasPrev = i > 0;
+    final hasNext = i >= 0 && i < seasons.length - 1;
+    // On TV the D-pad drives the season; the arrows are just indicators (a
+    // remote can't tap them, and making them focusable would fight the
+    // Left/Right handler). Elsewhere the arrows are the control.
+    final tappable = !isTvMode();
+
+    return Row(
+      children: [
+        _StepArrow(
+          icon: Icons.chevron_left,
+          enabled: hasPrev,
+          onTap: tappable && hasPrev ? () => onStep(-1) : null,
+        ),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Stagione $selected',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                '$episodeCount ep.',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        _StepArrow(
+          icon: Icons.chevron_right,
+          enabled: hasNext,
+          onTap: tappable && hasNext ? () => onStep(1) : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _StepArrow extends StatelessWidget {
+  const _StepArrow({required this.icon, required this.enabled, required this.onTap});
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(
+          icon,
+          color: enabled ? Colors.white : Colors.white24,
+          size: 28,
+        ),
       ),
     );
   }
