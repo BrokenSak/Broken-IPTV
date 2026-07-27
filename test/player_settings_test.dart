@@ -41,4 +41,26 @@ void main() {
     addTearDown(second.dispose);
     expect(second.read(playerSettingsProvider).volume, 65);
   });
+
+  test('upscaling: default off, persisted, garbage value falls back to off',
+      () async {
+    final first = ProviderContainer();
+    addTearDown(first.dispose);
+    expect(first.read(playerSettingsProvider).upscaling, VideoUpscaling.off,
+        reason: 'must default to the pre-feature rendering');
+
+    await first.read(playerSettingsProvider.notifier).setUpscaling(VideoUpscaling.max);
+    expect(first.read(playerSettingsProvider).upscaling, VideoUpscaling.max);
+
+    // A fresh container re-runs build(), reading back from the prefs box.
+    final second = ProviderContainer();
+    addTearDown(second.dispose);
+    expect(second.read(playerSettingsProvider).upscaling, VideoUpscaling.max);
+
+    // A stored value from a removed/renamed level must not crash: off.
+    await StorageService.prefsBox.put('player_upscaling', 'fsrcnnx');
+    final third = ProviderContainer();
+    addTearDown(third.dispose);
+    expect(third.read(playerSettingsProvider).upscaling, VideoUpscaling.off);
+  });
 }

@@ -339,4 +339,29 @@ void main() {
     expect(container.read(playerSettingsProvider).aspect, VideoAspect.fill,
         reason: 'OK on the focused chip must apply the setting');
   });
+
+  testWidgets('impostazioni: il telecomando raggiunge le chip Upscaling, OK applica',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
+    await tester.pumpAndSettle();
+
+    // From "Aggiungi playlist": down through aspect chips, the subtitles
+    // switch, the skip chips, onto the upscaling row. The section starts
+    // below the fold: each focus hop auto-scrolls (ensureVisible), which is
+    // exactly how a real remote reaches it. Rights clamp on the last chip
+    // ("Massimo") to stay deterministic.
+    await _pressDown(tester, 4);
+    expect(find.text('Massimo'), findsOneWidget,
+        reason: 'the remote must be able to scroll down to the Upscaling row');
+    for (var i = 0; i < 3; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+    }
+    await _pressOk(tester);
+
+    final context = tester.element(find.byType(SettingsScreen));
+    final container = ProviderScope.containerOf(context, listen: false);
+    expect(container.read(playerSettingsProvider).upscaling, VideoUpscaling.max,
+        reason: 'OK on the focused Massimo chip must apply the level');
+  });
 }

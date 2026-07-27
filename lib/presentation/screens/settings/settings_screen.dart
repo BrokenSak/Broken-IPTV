@@ -262,6 +262,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ],
           ),
+          const SizedBox(height: 12),
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.auto_awesome),
+            title: Text('Upscaling', style: _kItemTitle),
+            subtitle: Text(
+              'migliora i canali e i film a bassa qualità; Massimo richiede più potenza',
+              style: _kItemDesc,
+            ),
+          ),
+          Row(
+            children: [
+              for (final u in VideoUpscaling.values) ...[
+                Expanded(
+                  child: TvFocusable(
+                    borderRadius: 14,
+                    ringColor: ref.watch(playerSettingsProvider).upscaling == u
+                        ? Colors.black
+                        : null,
+                    onTap: () => ref.read(playerSettingsProvider.notifier).setUpscaling(u),
+                    child: _ModeChip(
+                      label: u.label,
+                      selected: ref.watch(playerSettingsProvider).upscaling == u,
+                    ),
+                  ),
+                ),
+                if (u != VideoUpscaling.values.last) const SizedBox(width: 12),
+              ],
+            ],
+          ),
           const SizedBox(height: 24),
           const Text('Sincronizzazione', style: _kSectionTitle),
           const SizedBox(height: 8),

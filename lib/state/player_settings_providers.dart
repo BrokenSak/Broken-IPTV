@@ -17,12 +17,44 @@ extension VideoAspectLabel on VideoAspect {
   }
 }
 
+/// GPU upscaling level for low-quality streams (SD live channels stretched to
+/// a big screen). Off = mpv defaults, i.e. exactly the pre-feature rendering.
+/// "Max" uses heavier scalers: fine on PC, may drop frames on a weak stick —
+/// that's why it's a user choice and not automatic.
+enum VideoUpscaling { off, enhanced, max }
+
+extension VideoUpscalingLabel on VideoUpscaling {
+  String get label {
+    switch (this) {
+      case VideoUpscaling.off:
+        return 'Off';
+      case VideoUpscaling.enhanced:
+        return 'Migliorato';
+      case VideoUpscaling.max:
+        return 'Massimo';
+    }
+  }
+
+  /// Compact form for the player's controls bar, where space is tight.
+  String get shortLabel {
+    switch (this) {
+      case VideoUpscaling.off:
+        return 'Off';
+      case VideoUpscaling.enhanced:
+        return 'HQ';
+      case VideoUpscaling.max:
+        return 'Max';
+    }
+  }
+}
+
 class PlayerSettings {
   const PlayerSettings({
     required this.aspect,
     required this.subtitlesEnabled,
     required this.skipSeconds,
     required this.volume,
+    required this.upscaling,
   });
 
   final VideoAspect aspect;
@@ -35,17 +67,22 @@ class PlayerSettings {
   /// The desktop gain boost on top of it lives in the player screen.
   final double volume;
 
+  /// Remembered upscaling level, applied to every stream (live included).
+  final VideoUpscaling upscaling;
+
   PlayerSettings copyWith({
     VideoAspect? aspect,
     bool? subtitlesEnabled,
     int? skipSeconds,
     double? volume,
+    VideoUpscaling? upscaling,
   }) {
     return PlayerSettings(
       aspect: aspect ?? this.aspect,
       subtitlesEnabled: subtitlesEnabled ?? this.subtitlesEnabled,
       skipSeconds: skipSeconds ?? this.skipSeconds,
       volume: volume ?? this.volume,
+      upscaling: upscaling ?? this.upscaling,
     );
   }
 }
@@ -57,6 +94,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   static const _subtitlesKey = 'subtitles_enabled';
   static const _skipKey = 'skip_seconds';
   static const _volumeKey = 'player_volume';
+  static const _upscalingKey = 'player_upscaling';
 
   @override
   PlayerSettings build() {
@@ -70,11 +108,18 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     final subtitles = StorageService.prefsBox.get(_subtitlesKey) as bool? ?? false;
     final skip = (StorageService.prefsBox.get(_skipKey) as num?)?.toInt() ?? 10;
     final volume = (StorageService.prefsBox.get(_volumeKey) as num?)?.toDouble() ?? 100.0;
+    // Default off; unknown stored values fall back to it (same rule as aspect).
+    final rawUpscaling = StorageService.prefsBox.get(_upscalingKey) as String?;
+    var upscaling = VideoUpscaling.off;
+    for (final u in VideoUpscaling.values) {
+      if (u.name == rawUpscaling) upscaling = u;
+    }
     return PlayerSettings(
       aspect: aspect,
       subtitlesEnabled: subtitles,
       skipSeconds: kSkipOptions.contains(skip) ? skip : 10,
       volume: volume.clamp(0, 100),
+      upscaling: upscaling,
     );
   }
 
@@ -104,6 +149,12 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   Future<void> setSkipSeconds(int seconds) async {
     final flushed = StorageService.prefsBox.put(_skipKey, seconds);
     state = state.copyWith(skipSeconds: seconds);
+    await flushed;
+  }
+
+  Future<void> setUpscaling(VideoUpscaling upscaling) async {
+    final flushed = StorageService.prefsBox.put(_upscalingKey, upscaling.name);
+    state = state.copyWith(upscaling: upscaling);
     await flushed;
   }
 }
