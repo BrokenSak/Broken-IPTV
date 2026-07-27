@@ -233,9 +233,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (mounted) _applyVolume(_volume);
       }).catchError((_) {}));
     }
-    // Remembered upscaling level (mpv scalers). Player-level properties: they
-    // survive every _open(), so once is enough; changes re-apply via ref.listen.
-    _applyUpscaling(settings.upscaling);
+    // Remembered upscaling level. Player-level properties survive every
+    // _open(); changes re-apply via ref.listen. Only when a level is active:
+    // with Off there is nothing to do, and not touching anything guarantees
+    // the stock pipeline. ⚠️ The VideoController sets `hwdec` asynchronously
+    // during startup and would overwrite ours (race) — re-apply once the
+    // first frame is out, when the controller is definitely done.
+    if (settings.upscaling != VideoUpscaling.off) {
+      _applyUpscaling(settings.upscaling);
+      unawaited(_controller.waitUntilFirstFrameRendered.then((_) {
+        if (mounted) {
+          _applyUpscaling(ref.read(playerSettingsProvider).upscaling);
+        }
+      }));
+    }
 
     _subscriptions.addAll([
       _player.stream.error.listen((message) {
@@ -667,13 +678,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
-  /// Applies the mpv scaler properties for [level]. Per-property try/catch: a
-  /// libmpv too old for a value (e.g. deinterlace=auto) skips that one
-  /// property instead of losing the rest.
+  /// Applies the mpv properties for [level]. Per-property try/catch: a libmpv
+  /// too old for a value (e.g. deinterlace=auto) skips that one property
+  /// instead of losing the rest.
   void _applyUpscaling(VideoUpscaling level) {
     final native = _player.platform;
     if (native is! NativePlayer) return;
-    for (final e in upscalingMpvProperties(level).entries) {
+    final props = upscalingMpvProperties(level, isAndroid: Platform.isAndroid);
+    for (final e in props.entries) {
       unawaited(native.setProperty(e.key, e.value).catchError((_) {}));
     }
   }

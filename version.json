@@ -1,7 +1,7 @@
 {
-  "build": 19,
-  "version": "1.6.1",
-  "notes": "Upscaling potenziato: ora la differenza si VEDE. Migliorato = immagine piu' nitida su qualsiasi canale/film; Massimo = pulizia del rumore + nitidezza forte (se scatta su Firestick, usa Migliorato). Cambia dal tasto nel player o da Impostazioni.",
+  "build": 20,
+  "version": "1.6.2",
+  "notes": "Correzione importante: con l'upscaling attivo i canali live davano schermo nero — risolto. Ora Migliorato e Massimo funzionano su live, film e serie. Se avevi attivato l'upscaling, aggiorna subito.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
