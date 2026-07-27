@@ -22,7 +22,6 @@ import 'channel_list_overlay.dart';
 import 'episode_list_overlay.dart';
 import 'player_keys.dart';
 import 'series_prompts.dart';
-import 'upscaling.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/watch_progress_providers.dart';
@@ -233,20 +232,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (mounted) _applyVolume(_volume);
       }).catchError((_) {}));
     }
-    // Remembered upscaling level. Player-level properties survive every
-    // _open(); changes re-apply via ref.listen. Only when a level is active:
-    // with Off there is nothing to do, and not touching anything guarantees
-    // the stock pipeline. ⚠️ The VideoController sets `hwdec` asynchronously
-    // during startup and would overwrite ours (race) — re-apply once the
-    // first frame is out, when the controller is definitely done.
-    if (settings.upscaling != VideoUpscaling.off) {
-      _applyUpscaling(settings.upscaling);
-      unawaited(_controller.waitUntilFirstFrameRendered.then((_) {
-        if (mounted) {
-          _applyUpscaling(ref.read(playerSettingsProvider).upscaling);
-        }
-      }));
-    }
+    // NB: no render/filter tweaking here. The upscaling feature (1.6.0→1.6.2)
+    // was removed: its lavfi software filters black-screened live channels
+    // against media_kit's hardware decoding (HANDOFF §7).
 
     _subscriptions.addAll([
       _player.stream.error.listen((message) {
@@ -678,28 +666,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
-  /// Applies the mpv properties for [level]. Per-property try/catch: a libmpv
-  /// too old for a value (e.g. deinterlace=auto) skips that one property
-  /// instead of losing the rest.
-  void _applyUpscaling(VideoUpscaling level) {
-    final native = _player.platform;
-    if (native is! NativePlayer) return;
-    final props = upscalingMpvProperties(level, isAndroid: Platform.isAndroid);
-    for (final e in props.entries) {
-      unawaited(native.setProperty(e.key, e.value).catchError((_) {}));
-    }
-  }
-
-  /// Cycle Off → Migliorato → Massimo and persist it (same round-trip as the
-  /// aspect toggle: the provider is the truth, ref.listen re-applies to mpv).
-  void _cycleUpscaling() {
-    final values = VideoUpscaling.values;
-    final current = ref.read(playerSettingsProvider).upscaling;
-    final next = values[(values.indexOf(current) + 1) % values.length];
-    ref.read(playerSettingsProvider.notifier).setUpscaling(next);
-    _poke();
-  }
-
   void _cycleSpeed() {
     final index = _speeds.indexWhere((s) => (s - _rate).abs() < 0.01);
     final next = _speeds[(index + 1) % _speeds.length];
@@ -791,10 +757,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final hasNext = _isSeries && _findNextEpisode() != null;
     final aspect = ref.watch(playerSettingsProvider).aspect;
-    // Re-apply the mpv scalers when the level changes — from the in-player
-    // toggle or from Settings pushed over the player.
-    ref.listen(playerSettingsProvider.select((s) => s.upscaling),
-        (_, next) => _applyUpscaling(next));
 
     // "Prossimo episodio" floats over the end credits (see series_prompts).
     // NB: the automatic "Salta sigla" was removed — a panel gives no chapter
@@ -958,8 +920,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         rate: _rate,
                         subtitlesOn: _subtitlesOn,
                         aspect: aspect,
-                        upscaling: ref.watch(playerSettingsProvider).upscaling,
-                        onUpscaling: _cycleUpscaling,
                         skipSeconds: ref.watch(playerSettingsProvider).skipSeconds,
                         formatDuration: formatHms,
                         onSkipBack: () => _skip(-ref.read(playerSettingsProvider).skipSeconds),
@@ -1442,8 +1402,6 @@ class _ControlsPanel extends StatelessWidget {
     required this.rate,
     required this.subtitlesOn,
     required this.aspect,
-    required this.upscaling,
-    required this.onUpscaling,
     required this.skipSeconds,
     required this.formatDuration,
     required this.onSkipBack,
@@ -1478,11 +1436,6 @@ class _ControlsPanel extends StatelessWidget {
   final double rate;
   final bool subtitlesOn;
   final VideoAspect aspect;
-
-  /// Current upscaling level; the button cycles Off → HQ → Max.
-  final VideoUpscaling upscaling;
-  final VoidCallback onUpscaling;
-
   final int skipSeconds;
   final String Function(Duration) formatDuration;
   final VoidCallback onSkipBack;
@@ -1673,30 +1626,6 @@ class _ControlsPanel extends StatelessWidget {
                   currentAudioId: currentAudioId,
                   onSelected: onSelectAudio,
                 ),
-              // Upscaling cycle (Off → HQ → Max) — works for live too, where
-              // SD channels benefit the most.
-              _PlayerButton(
-                tooltip: 'Upscaling',
-                onPressed: onUpscaling,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      color: upscaling == VideoUpscaling.off ? Colors.white54 : Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      upscaling.shortLabel,
-                      style: TextStyle(
-                        color: upscaling == VideoUpscaling.off ? Colors.white54 : Colors.white,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               _PlayerButton(
                 tooltip: 'Rapporto d\'aspetto',
                 onPressed: onAspect,

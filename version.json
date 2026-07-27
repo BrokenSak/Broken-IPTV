@@ -1,7 +1,7 @@
 {
-  "build": 20,
-  "version": "1.6.2",
-  "notes": "Correzione importante: con l'upscaling attivo i canali live davano schermo nero — risolto. Ora Migliorato e Massimo funzionano su live, film e serie. Se avevi attivato l'upscaling, aggiorna subito.",
+  "build": 21,
+  "version": "1.6.3",
+  "notes": "Rimosso l'upscaling: causava schermo nero sui canali live e non e' stato possibile risolverlo in modo affidabile. Il player torna esattamente com'era prima, stabile su live, film e serie. Restano tutte le altre novita': lista episodi nel player, tasto prossimo episodio e navigazione col telecomando sistemata.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
