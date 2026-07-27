@@ -1,7 +1,7 @@
 {
-  "build": 18,
-  "version": "1.6.0",
-  "notes": "Novita': Upscaling video. In Impostazioni (o col nuovo tasto nel player) scegli Off / Migliorato / Massimo: i canali e i film a bassa qualita' appaiono piu' nitidi. Migliorato e' pensato per il Firestick, Massimo per PC e TV potenti (se scatta, torna a Migliorato). La scelta viene ricordata.",
+  "build": 19,
+  "version": "1.6.1",
+  "notes": "Upscaling potenziato: ora la differenza si VEDE. Migliorato = immagine piu' nitida su qualsiasi canale/film; Massimo = pulizia del rumore + nitidezza forte (se scatta su Firestick, usa Migliorato). Cambia dal tasto nel player o da Impostazioni.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

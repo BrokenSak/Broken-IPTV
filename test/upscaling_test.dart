@@ -19,28 +19,41 @@ void main() {
     }
   });
 
-  test('off is exactly the mpv vo=gpu defaults (pre-feature rendering)', () {
+  test('off restores the media_kit defaults and clears the filter chain', () {
+    // media_kit itself sets scale/dscale=bilinear at init: off must put back
+    // exactly that baseline, and drop every lavfi filter.
     expect(upscalingMpvProperties(VideoUpscaling.off), {
       'scale': 'bilinear',
       'cscale': 'bilinear',
-      'sharpen': '0',
+      'vf': '',
       'deinterlace': 'no',
     });
   });
 
-  test('enhanced and max use progressively better scalers + sharpening', () {
+  test('enhanced and max sharpen via the lavfi DECODE chain, not vo_gpu only',
+      () {
+    // Regression ("non vedo differenza"): the first version relied on the
+    // vo_gpu `sharpen` option, which the bundled libmpv can silently ignore,
+    // and on scalers that do nothing when the video isn't being enlarged.
+    // The visible part must be a `vf` lavfi chain: renderer-independent and
+    // active on every stream.
     final enhanced = upscalingMpvProperties(VideoUpscaling.enhanced);
     expect(enhanced['scale'], 'spline36');
     expect(enhanced['cscale'], 'spline36');
-    expect(double.parse(enhanced['sharpen']!), greaterThan(0));
+    expect(enhanced['vf'], contains('unsharp'));
     expect(enhanced['deinterlace'], 'auto',
         reason: 'SD live channels are often interlaced');
 
     final max = upscalingMpvProperties(VideoUpscaling.max);
     expect(max['scale'], 'ewa_lanczossharp');
     expect(max['cscale'], 'ewa_lanczossharp');
-    expect(double.parse(max['sharpen']!), greaterThan(0));
-    expect(max['deinterlace'], 'auto');
+    expect(max['vf'], contains('unsharp'));
+    expect(max['vf'], contains('hqdn3d'),
+        reason: 'max denoises before sharpening (compressed IPTV streams)');
+    // Max must sharpen harder than enhanced (that's the visible ladder).
+    double amount(String vf) =>
+        double.parse(RegExp(r'unsharp=\d+:\d+:([\d.]+)').firstMatch(vf)!.group(1)!);
+    expect(amount(max['vf']!), greaterThan(amount(enhanced['vf']!)));
   });
 
   test('labels: settings names and the compact player-bar forms', () {
