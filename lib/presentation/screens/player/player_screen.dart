@@ -148,6 +148,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   int? _videoWidth;
   int? _videoHeight;
 
+  /// True once the device has confirmed it can do Picture-in-Picture (phone
+  /// only). Until then the PiP button stays hidden.
+  bool _pipSupported = false;
+
   // Live channel-list overlay (zap without leaving the player).
   bool _channelListOpen = false;
 
@@ -305,9 +309,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // Phone only: allow Picture-in-Picture while a video is playing — pressing
     // Home drops into a floating window instead of just backgrounding. Never on
     // TV. The listener strips the controls overlay in the tiny PiP window.
+    // The button only appears once the device confirms it supports PiP, so it
+    // can never be a control that silently does nothing.
     if (isPhoneMode()) {
       PipService.instance.addModeListener(_onPipModeChanged);
       PipService.instance.setAllowed(true);
+      unawaited(PipService.instance.isSupported().then((ok) {
+        if (mounted && ok) setState(() => _pipSupported = true);
+      }));
     }
 
     // TV: the controls start visible, but the root Focus (autofocus) would
@@ -472,6 +481,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           _episodeListOpen = false;
         });
       }
+    }
+  }
+
+  /// Explicit PiP button. The system refuses when the per-app
+  /// "Picture-in-picture" permission is off in Android Settings — say so
+  /// instead of leaving the user pressing a dead button.
+  Future<void> _enterPip() async {
+    final ok = await PipService.instance.enter();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Finestra mobile non disponibile: attivala in Impostazioni Android '
+            '→ App → Broken IPTV → Picture-in-picture.',
+          ),
+        ),
+      );
     }
   }
 
@@ -894,7 +920,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         streamId: _currentStreamId,
                         qualityLabel: _qualityLabel,
                         onBack: () => context.pop(),
-                        onPip: isPhoneMode() ? () => PipService.instance.enter() : null,
+                        onPip: _pipSupported ? _enterPip : null,
                       ),
                       const Spacer(),
                       _ControlsPanel(

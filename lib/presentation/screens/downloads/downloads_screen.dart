@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/download_item.dart';
 import '../../../state/downloads_providers.dart';
 import '../../../state/watch_progress_providers.dart';
+import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
 import '../../common/watch_bar.dart';
 
@@ -55,7 +56,7 @@ class _DownloadTile extends ConsumerWidget {
     final notifier = ref.read(downloadsProvider.notifier);
     final canPlay = item.isCompleted;
 
-    final tile = Container(
+    final card = Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
@@ -95,19 +96,34 @@ class _DownloadTile extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          _actions(context, notifier),
         ],
       ),
     );
 
-    // Only completed items are tappable (play offline).
-    if (!canPlay) return tile;
-    return TvFocusable(
-      autofocus: autofocus,
-      borderRadius: 12,
-      onTap: () => _play(context, ref),
-      child: tile,
+    // The action icons are SIBLINGS of the play area, never nested inside its
+    // TvFocusable: a D-pad cannot move focus into a node that sits within the
+    // currently focused one (same lesson as the playlist rows in Impostazioni).
+    // A row that can't be played has no focusable play area: its FIRST action
+    // icon takes the autofocus instead, so the screen always has a landing
+    // spot for the D-pad (a list starting with a queued/failed download used
+    // to leave the remote with nothing focused at all).
+    final actions = _actions(notifier, autofocus: autofocus && !canPlay);
+
+    return Row(
+      children: [
+        Expanded(
+          // Only completed items are playable; the rest is just a card.
+          child: canPlay
+              ? TvFocusable(
+                  autofocus: autofocus,
+                  borderRadius: 12,
+                  onTap: () => _play(context, ref),
+                  child: card,
+                )
+              : card,
+        ),
+        ...actions,
+      ],
     );
   }
 
@@ -149,37 +165,43 @@ class _DownloadTile extends ConsumerWidget {
     }
   }
 
-  Widget _actions(BuildContext context, DownloadsNotifier notifier) {
+  /// Row actions as [IconAction]s (own focus ring, OK works): plain
+  /// IconButtons had invisible focus with this theme.
+  List<Widget> _actions(DownloadsNotifier notifier, {bool autofocus = false}) {
     switch (item.status) {
       case DownloadStatus.downloading:
       case DownloadStatus.queued:
-        return IconButton(
-          tooltip: 'Annulla',
-          icon: const Icon(Icons.close, color: AppColors.textSecondary),
-          onPressed: () => notifier.remove(item.key),
-        );
+        return [
+          IconAction(
+            icon: Icons.close,
+            tooltip: 'Annulla',
+            autofocus: autofocus,
+            onTap: () => notifier.remove(item.key),
+          ),
+        ];
       case DownloadStatus.failed:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Riprova',
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              onPressed: () => notifier.retry(item.key),
-            ),
-            IconButton(
-              tooltip: 'Elimina',
-              icon: const Icon(Icons.delete_outline, color: AppColors.textSecondary),
-              onPressed: () => notifier.remove(item.key),
-            ),
-          ],
-        );
+        return [
+          IconAction(
+            icon: Icons.refresh,
+            color: Colors.white,
+            tooltip: 'Riprova',
+            autofocus: autofocus,
+            onTap: () => notifier.retry(item.key),
+          ),
+          IconAction(
+            icon: Icons.delete_outline,
+            tooltip: 'Elimina',
+            onTap: () => notifier.remove(item.key),
+          ),
+        ];
       case DownloadStatus.completed:
-        return IconButton(
-          tooltip: 'Elimina',
-          icon: const Icon(Icons.delete_outline, color: AppColors.textSecondary),
-          onPressed: () => notifier.remove(item.key),
-        );
+        return [
+          IconAction(
+            icon: Icons.delete_outline,
+            tooltip: 'Elimina',
+            onTap: () => notifier.remove(item.key),
+          ),
+        ];
     }
   }
 

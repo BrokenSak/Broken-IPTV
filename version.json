@@ -1,7 +1,7 @@
 {
-  "build": 21,
-  "version": "1.6.3",
-  "notes": "Rimosso l'upscaling: causava schermo nero sui canali live e non e' stato possibile risolverlo in modo affidabile. Il player torna esattamente com'era prima, stabile su live, film e serie. Restano tutte le altre novita': lista episodi nel player, tasto prossimo episodio e navigazione col telecomando sistemata.",
+  "build": 22,
+  "version": "1.7.0",
+  "notes": "Finestra mobile (PiP) riparata sul telefono: ora funziona anche con la navigazione a gesti, e se il sistema la blocca l'app te lo dice invece di non fare nulla. Navigazione col telecomando completata su tutta l'app: playlist, scaricati e aggiornamenti ora hanno il riquadro di selezione visibile.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

@@ -256,6 +256,8 @@ class _UpdateBanner extends ConsumerWidget {
           else
             TvFocusable(
               borderRadius: 12,
+              // White button → black ring (a white one would vanish on it).
+              ringColor: Colors.black,
               onTap: () => ref.read(updateDownloadProvider.notifier).downloadAndInstall(info),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),

@@ -15,12 +15,17 @@ class IconAction extends StatelessWidget {
     this.color = AppColors.textSecondary,
     this.tooltip,
     this.ringColor,
+    this.autofocus = false,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final Color color;
   final String? tooltip;
+
+  /// Only honoured where a D-pad is expected (see [dpadAutofocusEnabled]).
+  /// Used when this icon is the first focusable thing on a screen.
+  final bool autofocus;
 
   /// Focus ring override: pass black when the action sits on a white surface
   /// (e.g. the selected, white-filled playlist row), where the default white
@@ -35,6 +40,7 @@ class IconAction extends StatelessWidget {
       child: TvFocusable(
         borderRadius: 12,
         ringColor: ringColor,
+        autofocus: autofocus,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),

@@ -47,12 +47,22 @@ class ProfilesScreen extends ConsumerWidget {
                 );
               },
             ),
+      // One D-pad stop with a visible ring: a bare FAB has invisible focus with
+      // this theme, so on TV this was the unreachable-looking way to add a
+      // SECOND playlist. Black ring — the FAB is white.
       floatingActionButton: profiles.isEmpty
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () => context.push('/profiles/add'),
-              icon: const Icon(Icons.add),
-              label: const Text('Aggiungi playlist'),
+          : TvFocusable(
+              borderRadius: 16,
+              ringColor: Colors.black,
+              onTap: () => context.push('/profiles/add'),
+              child: ExcludeFocus(
+                child: FloatingActionButton.extended(
+                  onPressed: () => context.push('/profiles/add'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Aggiungi playlist'),
+                ),
+              ),
             ),
     );
   }
