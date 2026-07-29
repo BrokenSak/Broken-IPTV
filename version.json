@@ -1,7 +1,7 @@
 {
-  "build": 23,
-  "version": "1.7.1",
-  "notes": "Telecomando nel player sistemato: ora si raggiungono anche i tasti a destra (velocita', sottotitoli, riempi) e la barra in alto (indietro, impostazioni). La barra del tempo non fa piu' salti enormi: un colpo sposta di 5 secondi e tenendo premuto accelera fino a un minuto per scatto.",
+  "build": 24,
+  "version": "1.7.2",
+  "notes": "Lista episodi e canali nel player: aprendola col telecomando ora il cursore entra davvero nella lista (prima restava dietro, sul pulsante) e parte dall'episodio o canale che stai guardando, segnato con una barra bianca e la scritta In riproduzione.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

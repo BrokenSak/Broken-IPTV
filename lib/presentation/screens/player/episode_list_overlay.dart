@@ -49,10 +49,36 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
   /// back into the (rebuilt) list instead of leaving the focus stranded.
   final _firstRowNode = FocusNode(debugLabel: 'episodes.first');
 
+  /// The row of the episode being played, so the remote lands on **that** one
+  /// (not on episode 1) when the overlay opens.
+  final _currentRowNode = FocusNode(debugLabel: 'episodes.current');
+
+  /// Whether the focus has already been pulled into the panel.
+  bool _focusClaimed = false;
+
   @override
   void dispose() {
     _firstRowNode.dispose();
+    _currentRowNode.dispose();
     super.dispose();
+  }
+
+  /// Pulls the D-pad into the list as soon as the episodes exist.
+  ///
+  /// ⚠️ A plain `autofocus` on the row is NOT enough: the player's controls are
+  /// still focused (the "Episodi" button) when this overlay mounts, and Flutter
+  /// only honours autofocus while the scope has no focused child. Without this
+  /// the focus stayed behind the panel — "non mi fa vedere cosa seleziono".
+  /// The list also arrives asynchronously (seriesDetailProvider), so the claim
+  /// happens on the first frame that actually has rows.
+  void _claimFocus() {
+    if (_focusClaimed) return;
+    _focusClaimed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _currentRowNode.canRequestFocus ? _currentRowNode : _firstRowNode;
+      target.requestFocus();
+    });
   }
 
   int? _seasonOf(SeriesDetail detail, String? episodeId) {
@@ -117,6 +143,8 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
                 _season ??= _seasonOf(detail, widget.currentEpisodeId) ?? seasons.first;
                 final season = seasons.contains(_season) ? _season! : seasons.first;
                 final episodes = detail.episodesBySeason[season] ?? const <Episode>[];
+                // Rows exist now: take the D-pad off the controls behind us.
+                if (episodes.isNotEmpty) _claimFocus();
 
                 return _panel(Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -167,16 +195,34 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
                           return TvFocusable(
                             borderRadius: 12,
                             // D-pad: enter the list right away when the
-                            // overlay opens (policy-gated: TV only).
+                            // overlay opens (policy-gated: TV only). The real
+                            // entry point is _claimFocus() — see its note.
                             autofocus: index == 0,
-                            focusNode: index == 0 ? _firstRowNode : null,
+                            focusNode: selected
+                                ? _currentRowNode
+                                : (index == 0 ? _firstRowNode : null),
                             onTap: () => widget.onSelect(e),
-                            child: ListTile(
+                            child: DecoratedBox(
+                              // The episode PLAYING right now: a solid white
+                              // bar down its left edge. The focus ring says
+                              // "where the remote is"; this says "where you
+                              // are in the series" — two different questions,
+                              // so they must look different.
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                color: selected
+                                    ? Colors.white.withValues(alpha: 0.10)
+                                    : Colors.transparent,
+                                border: selected
+                                    ? const Border(
+                                        left: BorderSide(color: Colors.white, width: 4),
+                                      )
+                                    : null,
+                              ),
+                              child: ListTile(
                               // Uniform row height (and top-aligned thumbnail)
                               // whether or not there's a "left off at" line.
                               isThreeLine: true,
-                              selected: selected,
-                              selectedTileColor: Colors.white.withValues(alpha: 0.08),
                               leading: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
                                 child: SizedBox(
@@ -218,22 +264,31 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     WatchBar(fraction: progress?.fraction ?? 0),
-                                    if (progress != null) ...[
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        progress.finished
-                                            ? 'Visto'
-                                            : 'Lasciato a ${formatHms(Duration(milliseconds: progress.positionMs))}',
-                                        style: const TextStyle(
-                                            color: AppColors.textSecondary, fontSize: 11),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      selected
+                                          ? 'In riproduzione'
+                                          : progress == null
+                                              ? ''
+                                              : progress.finished
+                                                  ? 'Visto'
+                                                  : 'Lasciato a ${formatHms(Duration(milliseconds: progress.positionMs))}',
+                                      style: TextStyle(
+                                        color: selected
+                                            ? Colors.white
+                                            : AppColors.textSecondary,
+                                        fontSize: 11,
+                                        fontWeight:
+                                            selected ? FontWeight.w700 : FontWeight.normal,
                                       ),
-                                    ],
+                                    ),
                                   ],
                                 ),
                               ),
                               trailing: selected
                                   ? const Icon(Icons.equalizer, color: Colors.white, size: 18)
                                   : null,
+                            ),
                             ),
                           );
                         },

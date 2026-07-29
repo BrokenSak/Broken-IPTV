@@ -39,10 +39,31 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
   /// back into the (rebuilt) list instead of leaving the focus stranded.
   final _firstRowNode = FocusNode(debugLabel: 'channels.first');
 
+  /// The row of the channel playing right now, so the remote opens ON it.
+  final _currentRowNode = FocusNode(debugLabel: 'channels.current');
+
+  bool _focusClaimed = false;
+
   @override
   void dispose() {
     _firstRowNode.dispose();
+    _currentRowNode.dispose();
     super.dispose();
+  }
+
+  /// Pulls the D-pad into the list as soon as the channels exist.
+  ///
+  /// ⚠️ `autofocus` alone does nothing here: the player's controls (the
+  /// "Canali" button) still hold the focus when this overlay mounts, and
+  /// Flutter honours autofocus only while the scope has no focused child.
+  void _claimFocus() {
+    if (_focusClaimed) return;
+    _focusClaimed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _currentRowNode.canRequestFocus ? _currentRowNode : _firstRowNode;
+      target.requestFocus();
+    });
   }
 
   void _selectCategory(String? id) {
@@ -136,6 +157,8 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
                                 style: TextStyle(color: AppColors.textSecondary)),
                           );
                         }
+                        // Rows exist now: take the D-pad off the controls.
+                        _claimFocus();
                         return ListView.builder(
                           // Re-keyed per category: scroll back to the top and
                           // re-fire the first row's autofocus on a switch.
@@ -148,14 +171,30 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
                             return TvFocusable(
                               borderRadius: 12,
                               // D-pad: enter the list right away when the
-                              // overlay opens (policy-gated: TV only).
+                              // overlay opens (the real entry point is
+                              // _claimFocus — autofocus alone is ignored here).
                               autofocus: index == 0,
-                              focusNode: index == 0 ? _firstRowNode : null,
+                              focusNode: selected
+                                  ? _currentRowNode
+                                  : (index == 0 ? _firstRowNode : null),
                               onTap: () => widget.onSelect(c.streamId, c.name),
-                              child: ListTile(
+                              child: DecoratedBox(
+                                // The channel playing right now: white bar on
+                                // the left edge. Distinct from the focus ring,
+                                // which answers a different question.
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: selected
+                                      ? Colors.white.withValues(alpha: 0.10)
+                                      : Colors.transparent,
+                                  border: selected
+                                      ? const Border(
+                                          left: BorderSide(color: Colors.white, width: 4),
+                                        )
+                                      : null,
+                                ),
+                                child: ListTile(
                                 dense: true,
-                                selected: selected,
-                                selectedTileColor: Colors.white.withValues(alpha: 0.08),
                                 leading: SizedBox(
                                   width: 42,
                                   height: 42,
@@ -178,9 +217,20 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
                                         selected ? FontWeight.w700 : FontWeight.normal,
                                   ),
                                 ),
+                                subtitle: selected
+                                    ? const Text(
+                                        'In riproduzione',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      )
+                                    : null,
                                 trailing: selected
                                     ? const Icon(Icons.equalizer, color: Colors.white, size: 18)
                                     : null,
+                              ),
                               ),
                             );
                           },

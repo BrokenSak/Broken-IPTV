@@ -17,6 +17,7 @@ import 'package:broken_iptv/data/repositories/series_repository.dart';
 import 'package:broken_iptv/data/services/device_mode_service.dart';
 import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/data/services/xtream_session.dart';
+import 'package:broken_iptv/presentation/common/tv_focusable.dart';
 import 'package:broken_iptv/presentation/common/watch_bar.dart';
 import 'package:broken_iptv/presentation/screens/player/channel_list_overlay.dart';
 import 'package:broken_iptv/presentation/screens/player/episode_list_overlay.dart';
@@ -183,7 +184,9 @@ void main() {
       // Every row carries the classic progress bar underneath.
       expect(find.byType(WatchBar), findsNWidgets(2));
       expect(find.text('Visto'), findsOneWidget);
-      expect(find.textContaining('Lasciato a'), findsOneWidget);
+      // e2 IS the episode playing: its line says so instead of "Lasciato a"
+      // (that's how you tell where you are in the series).
+      expect(find.text('In riproduzione'), findsOneWidget);
     });
 
     testWidgets('OK plays the focused row; arrows move between episodes',
@@ -235,9 +238,10 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Up from the first row reaches the header; Left makes sure we are on
-      // the dropdown trigger (not the X), wherever the traversal landed.
-      await _press(tester, LogicalKeyboardKey.arrowUp);
+      // Climb out of the list into the header. The overlay now opens ON the
+      // episode being played (e2, the 2nd row), so this walks up until the
+      // season dropdown is reachable, then Left off the X onto the trigger.
+      await _press(tester, LogicalKeyboardKey.arrowUp, 3);
       await _press(tester, LogicalKeyboardKey.arrowLeft);
 
       // OK opens the season menu: current entry (Stagione 1) + Stagione 2.
@@ -284,6 +288,8 @@ void main() {
     });
   });
 
+  group('overlay aperti dal player (composizione reale)', _compositionTests);
+
   group('ChannelListOverlay (TV remote)', () {
     testWidgets('OK zaps to the focused channel; category filter works',
         (tester) async {
@@ -327,5 +333,103 @@ void main() {
       await _pressOk(tester);
       expect(selected, ['100', '200']);
     });
+  });
+}
+
+/// The composition bug: an overlay opened FROM the player mounts while the
+/// controls behind it still hold the focus. Flutter honours `autofocus` only
+/// when the scope has no focused child, so the D-pad stayed on the "Episodi"
+/// button and the list showed no selection at all — "non mi fa vedere cosa
+/// seleziono o su che episodio sono". The earlier tests pumped the overlay
+/// alone, where autofocus works, so they never caught it.
+void _compositionTests() {
+  testWidgets('EpisodeListOverlay: aperto sopra i controlli, il focus entra '
+      'nella lista e parte dall\'episodio in riproduzione', (tester) async {
+    final behind = FocusNode(debugLabel: 'controls.episodi');
+    addTearDown(behind.dispose);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        seriesRepositoryProvider.overrideWith((ref) async => FakeSeriesRepository()),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: Stack(
+            children: [
+              // Stands in for the player's controls bar: it has the focus when
+              // the overlay appears, exactly like the real "Episodi" button.
+              Positioned(
+                bottom: 0,
+                child: TvFocusable(
+                  focusNode: behind,
+                  autofocus: true,
+                  onTap: () {},
+                  child: const SizedBox(width: 100, height: 40, child: Text('Episodi')),
+                ),
+              ),
+              EpisodeListOverlay(
+                seriesId: _seriesId,
+                currentEpisodeId: 'e2', // second episode is playing
+                fallbackImage: null,
+                onClose: () {},
+                onSelect: (_) {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(behind.hasPrimaryFocus, isFalse,
+        reason: 'the focus must leave the control behind the panel');
+
+    final focused = FocusManager.instance.primaryFocus;
+    expect(focused?.debugLabel, 'episodes.current',
+        reason: 'the remote must land on the episode being played');
+
+    // And that row is the one marked "In riproduzione".
+    expect(find.text('In riproduzione'), findsOneWidget);
+  });
+
+  testWidgets('ChannelListOverlay: idem — il focus entra e parte dal canale '
+      'in onda', (tester) async {
+    final behind = FocusNode(debugLabel: 'controls.canali');
+    addTearDown(behind.dispose);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        liveRepositoryProvider.overrideWith((ref) async => FakeLiveRepository()),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: Stack(
+            children: [
+              Positioned(
+                bottom: 0,
+                child: TvFocusable(
+                  focusNode: behind,
+                  autofocus: true,
+                  onTap: () {},
+                  child: const SizedBox(width: 100, height: 40, child: Text('Canali')),
+                ),
+              ),
+              ChannelListOverlay(
+                currentStreamId: '200', // second channel is on air
+                onClose: () {},
+                onSelect: (_, _) {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(behind.hasPrimaryFocus, isFalse);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'channels.current');
+    expect(find.text('In riproduzione'), findsOneWidget);
   });
 }
