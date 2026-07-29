@@ -1,7 +1,7 @@
 {
-  "build": 22,
-  "version": "1.7.0",
-  "notes": "Finestra mobile (PiP) riparata sul telefono: ora funziona anche con la navigazione a gesti, e se il sistema la blocca l'app te lo dice invece di non fare nulla. Navigazione col telecomando completata su tutta l'app: playlist, scaricati e aggiornamenti ora hanno il riquadro di selezione visibile.",
+  "build": 23,
+  "version": "1.7.1",
+  "notes": "Telecomando nel player sistemato: ora si raggiungono anche i tasti a destra (velocita', sottotitoli, riempi) e la barra in alto (indietro, impostazioni). La barra del tempo non fa piu' salti enormi: un colpo sposta di 5 secondi e tenendo premuto accelera fino a un minuto per scatto.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
