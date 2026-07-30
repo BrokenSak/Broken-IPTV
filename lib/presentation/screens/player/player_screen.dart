@@ -22,6 +22,7 @@ import 'player_keys.dart';
 import 'series_prompts.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
+import '../../../state/sync_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 
 /// Desktop-only software gain on top of the 0–100 UI volume: IPTV streams are
@@ -165,6 +166,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // VOD/series and left audio playing).
   late final WatchProgressNotifier _watchProgress;
 
+  /// Cached in initState (see [_watchProgress]) so closing the player can push
+  /// the freshly saved progress without touching `ref` during dispose.
+  late final SyncNotifier _sync;
+
   bool get _isSeries => widget.seriesId != null;
   bool get _isVod => widget.vodId != null;
   bool get _isLive => widget.isLive;
@@ -196,6 +201,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _currentStreamId = widget.streamId;
     _pendingResumeMs = widget.resumeMs > 0 ? widget.resumeMs : null;
     _watchProgress = ref.read(watchProgressProvider.notifier);
+    // Cached for the same reason as _watchProgress: dispose() must not touch
+    // `ref` (it can throw and abort teardown).
+    _sync = ref.read(syncProvider.notifier);
 
     _player = Player();
     _controller = VideoController(_player);
@@ -514,6 +522,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     player.setVolume(0);
     try {
       _maybeSaveProgress(force: true);
+    } catch (_) {}
+    // Push what we just saved. Closing the player is THE moment for it: the
+    // resume point is final and the network is free again (during playback
+    // PlaybackActivity vetoes every sync).
+    //
+    // ⚠️ Without this the progress only left the device at the app's NEXT
+    // start: you finished an episode on the TV, opened the phone, and it
+    // wasn't there — because the TV had never pushed. Pressing Home doesn't
+    // help either, the background trigger is vetoed while the player is up
+    // (and on the phone PiP keeps it up). Guarded like the save above: never
+    // let it break teardown.
+    try {
+      unawaited(_sync.syncIfChanged());
     } catch (_) {}
     _hideTimer?.cancel();
     _retryTimer?.cancel();

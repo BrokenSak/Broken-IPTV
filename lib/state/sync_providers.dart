@@ -18,6 +18,29 @@ const kDefaultSyncEndpoint = 'https://broken-iptv-sync.bknsync.workers.dev';
 /// Never hammer the backend: two triggers closer than this do one round trip.
 const _kMinInterval = Duration(seconds: 30);
 
+/// Whether the automatic trigger should actually do a round trip.
+///
+/// Pure so the rules are testable — they decide when your progress leaves the
+/// device, and getting them wrong looks exactly like "sync is broken".
+///
+/// - [playing] vetoes everything: never compete with a running stream for the
+///   network. The player calls this again the moment it closes, which is when
+///   the progress is final anyway.
+/// - [changed] is the write-budget guard: nothing new, no request at all.
+bool shouldAutoSync({
+  required bool enabled,
+  required bool running,
+  required bool playing,
+  required Duration? sinceLastAttempt,
+  required bool changed,
+  Duration minInterval = _kMinInterval,
+}) {
+  if (!enabled || running) return false;
+  if (playing) return false;
+  if (sinceLastAttempt != null && sinceLastAttempt < minInterval) return false;
+  return changed;
+}
+
 class SyncState {
   const SyncState({
     this.code,
@@ -171,12 +194,17 @@ class SyncNotifier extends Notifier<SyncState> {
   /// the network entirely when nothing changed since the last push — which is
   /// the common case, and keeps the free tier's write budget for real edits.
   Future<void> syncIfChanged() async {
-    if (!state.enabled || state.running) return;
-    if (PlaybackActivity.active) return;
-    final last = _lastAttempt;
-    if (last != null && DateTime.now().difference(last) < _kMinInterval) return;
     final local = ref.read(syncRepositoryProvider).readLocal();
-    if (syncFingerprint(local) == _pushedFingerprint) return;
+    final last = _lastAttempt;
+    if (!shouldAutoSync(
+      enabled: state.enabled,
+      running: state.running,
+      playing: PlaybackActivity.active,
+      sinceLastAttempt: last == null ? null : DateTime.now().difference(last),
+      changed: syncFingerprint(local) != _pushedFingerprint,
+    )) {
+      return;
+    }
     await syncNow();
   }
 }

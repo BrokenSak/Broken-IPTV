@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:broken_iptv/state/sync_providers.dart';
+
 import 'package:broken_iptv/data/models/favorite_item.dart';
 import 'package:broken_iptv/data/models/watch_progress.dart';
 import 'package:broken_iptv/data/repositories/favorites_repository.dart';
@@ -32,6 +34,8 @@ SyncBlob _favs(Map<String, SyncEntry> favorites) =>
     SyncBlob(favorites: favorites, progress: const {});
 
 void main() {
+  group('quando parte la sincronizzazione automatica', _autoSyncPolicyTests);
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('merge', () {
@@ -336,5 +340,88 @@ void main() {
       // Applying the merge leaves nothing further to push.
       expect(syncFingerprint(SyncRepository().readLocal()), syncFingerprint(merged));
     });
+  });
+}
+
+/// When the automatic sync actually fires.
+///
+/// These rules decide when your progress leaves the device, and getting them
+/// wrong looks exactly like "sync is broken" — which is how this got noticed:
+/// finishing an episode on the TV and not finding it on the phone.
+void _autoSyncPolicyTests() {
+  test('non fa nulla se la sync e\' spenta o gia\' in corso', () {
+    expect(
+        shouldAutoSync(
+            enabled: false,
+            running: false,
+            playing: false,
+            sinceLastAttempt: null,
+            changed: true),
+        isFalse);
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: true,
+            playing: false,
+            sinceLastAttempt: null,
+            changed: true),
+        isFalse);
+  });
+
+  test('MAI durante la riproduzione: non si contende la rete con lo stream',
+      () {
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: false,
+            playing: true,
+            sinceLastAttempt: null,
+            changed: true),
+        isFalse);
+  });
+
+  test('appena il player si chiude invece parte (stesso stato, playing=false)',
+      () {
+    // This is the trigger added after the report: the resume point is final
+    // and the network is free, so the push happens NOW instead of waiting for
+    // the app's next start.
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: false,
+            playing: false,
+            sinceLastAttempt: null,
+            changed: true),
+        isTrue);
+  });
+
+  test('niente da mandare = nessuna richiesta (budget del piano free)', () {
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: false,
+            playing: false,
+            sinceLastAttempt: null,
+            changed: false),
+        isFalse);
+  });
+
+  test('rispetta l\'intervallo minimo tra due tentativi', () {
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: false,
+            playing: false,
+            sinceLastAttempt: const Duration(seconds: 5),
+            changed: true),
+        isFalse);
+    expect(
+        shouldAutoSync(
+            enabled: true,
+            running: false,
+            playing: false,
+            sinceLastAttempt: const Duration(minutes: 2),
+            changed: true),
+        isTrue);
   });
 }
