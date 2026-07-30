@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+// ScrollCacheExtent lives in rendering, not re-exported by material.
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -42,12 +44,30 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
   /// The row of the channel playing right now, so the remote opens ON it.
   final _currentRowNode = FocusNode(debugLabel: 'channels.current');
 
+  /// One focus node per channel, **owned by the state**.
+  ///
+  /// ⚠️ A ListView.builder destroys rows that scroll out of view together with
+  /// any focus node they created, so scrolling a long channel list with the
+  /// D-pad kept dropping the focus. Owning the nodes here means a recycled row
+  /// re-attaches the SAME node and the focus survives.
+  final _rowNodes = <String, FocusNode>{};
+
+  FocusNode _nodeFor(Channel c, {required bool current, required bool first}) {
+    if (current) return _currentRowNode;
+    if (first) return _firstRowNode;
+    return _rowNodes.putIfAbsent(
+        c.streamId, () => FocusNode(debugLabel: 'channel.${c.streamId}'));
+  }
+
   bool _focusClaimed = false;
 
   @override
   void dispose() {
     _firstRowNode.dispose();
     _currentRowNode.dispose();
+    for (final n in _rowNodes.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -164,19 +184,23 @@ class _ChannelListOverlayState extends ConsumerState<ChannelListOverlay> {
                           // re-fire the first row's autofocus on a switch.
                           key: ValueKey(_catId),
                           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                          // Build past the viewport: directional focus can only
+                          // reach rows that exist (see the note on _rowNodes).
+                          scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
                           itemCount: list.length,
                           itemBuilder: (context, index) {
                             final Channel c = list[index];
                             final selected = c.streamId == widget.currentStreamId;
                             return TvFocusable(
+                              // Stable key so a recycled row keeps its state.
+                              key: ValueKey(c.streamId),
                               borderRadius: 12,
                               // D-pad: enter the list right away when the
                               // overlay opens (the real entry point is
                               // _claimFocus — autofocus alone is ignored here).
                               autofocus: index == 0,
-                              focusNode: selected
-                                  ? _currentRowNode
-                                  : (index == 0 ? _firstRowNode : null),
+                              focusNode: _nodeFor(c,
+                                  current: selected, first: index == 0),
                               onTap: () => widget.onSelect(c.streamId, c.name),
                               child: DecoratedBox(
                                 // The channel playing right now: white bar on

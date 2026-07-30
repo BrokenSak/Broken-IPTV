@@ -48,15 +48,22 @@ Episode _ep(String id, int num, String title, int season) => Episode(
     );
 
 class FakeSeriesRepository extends SeriesRepository {
-  FakeSeriesRepository() : super(_fakeSession());
+  FakeSeriesRepository({this.episodeCount = 2}) : super(_fakeSession());
+
+  /// Season 1 length. A long season makes ListView.builder recycle rows,
+  /// which is what broke the focus while scrolling.
+  final int episodeCount;
 
   @override
   Future<SeriesDetail> getDetail(String seriesId) async => SeriesDetail(
         seriesId: seriesId,
         name: 'Serie Test',
         episodesBySeason: {
-          1: [_ep('e1', 1, 'Uno', 1), _ep('e2', 2, 'Due', 1)],
-          2: [_ep('e3', 1, 'Tre', 2)],
+          1: [
+            for (var i = 1; i <= episodeCount; i++)
+              _ep('e$i', i, i == 1 ? 'Uno' : (i == 2 ? 'Due' : 'Ep $i'), 1),
+          ],
+          2: [_ep('s2e1', 1, 'Tre', 2)],
         },
       );
 }
@@ -258,7 +265,7 @@ void main() {
 
       // After the switch the focus must land back on the list: OK plays S2E1.
       await _pressOk(tester);
-      expect(selected, ['e3'],
+      expect(selected, ['s2e1'],
           reason: 'after a season change OK must act on the first episode');
     });
 
@@ -289,6 +296,8 @@ void main() {
   });
 
   group('overlay aperti dal player (composizione reale)', _compositionTests);
+
+  group('scorrimento lista episodi', _scrollFocusTests);
 
   group('ChannelListOverlay (TV remote)', () {
     testWidgets('OK zaps to the focused channel; category filter works',
@@ -431,5 +440,78 @@ void _compositionTests() {
     expect(behind.hasPrimaryFocus, isFalse);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'channels.current');
     expect(find.text('In riproduzione'), findsOneWidget);
+  });
+}
+
+/// Scrolling a long episode list with the D-pad.
+///
+/// Reported: "gli episodi non rimangono sempre focussati se scorro su e giu".
+/// ListView.builder destroys rows that leave the viewport — and with them any
+/// focus node the row itself created — so the ring vanished mid-scroll and the
+/// arrows hit a wall at the last built row. The nodes now live in the state.
+void _scrollFocusTests() {
+  testWidgets("scorrendo giu' e su il focus resta sempre su un episodio",
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        seriesRepositoryProvider
+            .overrideWith((ref) async => FakeSeriesRepository(episodeCount: 30)),
+      ],
+      child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e1',
+          fallbackImage: null,
+          onClose: () {},
+          onSelect: (_) {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Walk far enough down that the early rows are recycled away.
+    for (var i = 0; i < 20; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+      final node = FocusManager.instance.primaryFocus;
+      expect(node, isNotNull, reason: 'focus lost after $i steps down');
+      expect(node!.debugLabel, startsWith('episode'),
+          reason: 'after $i steps down the focus left the list '
+              '(landed on ${node.debugLabel})');
+    }
+
+    // And back up again.
+    for (var i = 0; i < 20; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowUp);
+      final node = FocusManager.instance.primaryFocus;
+      expect(node, isNotNull, reason: 'focus lost after $i steps up');
+      expect(node!.debugLabel, startsWith('episode'),
+          reason: 'after $i steps up the focus left the list '
+              '(landed on ${node.debugLabel})');
+    }
+  });
+
+  testWidgets("OK dopo lo scorrimento apre l'episodio giusto", (tester) async {
+    final picked = <String>[];
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        seriesRepositoryProvider
+            .overrideWith((ref) async => FakeSeriesRepository(episodeCount: 30)),
+      ],
+      child: _shell(
+        EpisodeListOverlay(
+          seriesId: _seriesId,
+          currentEpisodeId: 'e1',
+          fallbackImage: null,
+          onClose: () {},
+          onSelect: (e) => picked.add(e.id),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Three rows down = episode 4, even after the list has scrolled.
+    await _press(tester, LogicalKeyboardKey.arrowDown, 3);
+    await _pressOk(tester);
+    expect(picked, ['e4']);
   });
 }

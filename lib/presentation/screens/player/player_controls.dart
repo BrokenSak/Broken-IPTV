@@ -21,6 +21,18 @@ import '../../common/tv_focusable.dart';
 /// test can drive the whole control surface with a simulated D-pad
 /// (player_controls_test.dart).
 
+/// The playback speeds offered by the speed dropdown.
+const kPlaybackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+/// "1x", "1.25x" — trailing zeros trimmed.
+String formatSpeed(double rate) {
+  final text = rate
+      .toStringAsFixed(2)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+  return '${text}x';
+}
+
 /// Human-readable label for an audio track (language name, else title, else id).
 String _audioTrackLabel(AudioTrack t) {
   final lang = (t.language ?? '').trim().toLowerCase();
@@ -552,9 +564,9 @@ class PlayerControlsPanel extends StatelessWidget {
     required this.onSeek,
     required this.onVolume,
     required this.onMute,
-    required this.onSubtitles,
+    required this.onSubtitlesChanged,
     required this.onAspect,
-    required this.onSpeed,
+    required this.onRate,
     required this.channelListOpen,
     required this.onChannelList,
     required this.episodeListOpen,
@@ -586,9 +598,12 @@ class PlayerControlsPanel extends StatelessWidget {
   final ValueChanged<Duration> onSeek;
   final ValueChanged<double> onVolume;
   final VoidCallback onMute;
-  final VoidCallback onSubtitles;
+  /// Sets subtitles on/off from the dropdown.
+  final ValueChanged<bool> onSubtitlesChanged;
   final VoidCallback onAspect;
-  final VoidCallback onSpeed;
+
+  /// Sets the playback speed from the dropdown.
+  final ValueChanged<double> onRate;
 
   /// Live channel list (only for live). Null hides the "Canali" button.
   final bool channelListOpen;
@@ -740,22 +755,36 @@ class PlayerControlsPanel extends StatelessWidget {
                 ),
               ],
               const Spacer(),
+              // Speed and subtitles are DROPDOWNS, not cycle buttons: you pick
+              // the value you want instead of pressing OK until it comes round.
+              // GlassDropdown is the TV-ready one — ring on the trigger, ring
+              // on every entry, and the focus lands on the CURRENT value when
+              // the menu opens (see glass_dropdown.dart).
+              //
               // Speed only makes sense for on-demand content, not live.
               if (!isLive)
-                PlayerButton(
+                PlayerMenuButton<double>(
                   tooltip: 'Velocità',
-                  onPressed: onSpeed,
+                  value: kPlaybackSpeeds.contains(rate) ? rate : 1.0,
+                  onSelected: onRate,
+                  entries: [
+                    for (final s in kPlaybackSpeeds)
+                      PlayerMenuEntry(value: s, label: formatSpeed(s)),
+                  ],
                   child: Text(
-                    '${rate.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}x',
+                    formatSpeed(rate),
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),
-              PlayerButton(
+              PlayerMenuButton<bool>(
                 tooltip: 'Sottotitoli',
-                onPressed: onSubtitles,
+                value: subtitlesOn,
+                onSelected: onSubtitlesChanged,
+                entries: const [
+                  PlayerMenuEntry(value: false, label: 'Sottotitoli off'),
+                  PlayerMenuEntry(value: true, label: 'Sottotitoli on'),
+                ],
                 child: Icon(
                   subtitlesOn ? Icons.subtitles : Icons.subtitles_off_outlined,
                   color: subtitlesOn ? Colors.white : Colors.white54,
@@ -851,6 +880,106 @@ class PlayerRootFocus extends StatelessWidget {
       skipTraversal: true,
       onKeyEvent: onKeyEvent,
       child: child,
+    );
+  }
+}
+
+/// One choice in a [PlayerMenuButton].
+class PlayerMenuEntry<T> {
+  const PlayerMenuEntry({required this.value, required this.label});
+
+  final T value;
+  final String label;
+}
+
+/// A compact player control that opens a **dropdown** instead of cycling
+/// through values (user request for speed and subtitles: "deve essere un menu
+/// a tendina, ricordati il focus").
+///
+/// The trigger stays icon-sized so the controls bar doesn't overflow — a
+/// full-width dropdown in that Row blew the layout on a TV screen. Every entry
+/// is a [TvFocusable] (visible ring, OK activates) and the menu **opens with
+/// the focus on the current value**, so a remote can go straight up or down
+/// from where it already is.
+class PlayerMenuButton<T> extends StatefulWidget {
+  const PlayerMenuButton({
+    super.key,
+    required this.tooltip,
+    required this.value,
+    required this.entries,
+    required this.onSelected,
+    required this.child,
+  });
+
+  final String tooltip;
+  final T value;
+  final List<PlayerMenuEntry<T>> entries;
+  final ValueChanged<T> onSelected;
+
+  /// What the trigger shows (an icon, or the current speed).
+  final Widget child;
+
+  @override
+  State<PlayerMenuButton<T>> createState() => _PlayerMenuButtonState<T>();
+}
+
+class _PlayerMenuButtonState<T> extends State<PlayerMenuButton<T>> {
+  final _controller = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    // Autofocus has to land somewhere: the current value, else the first.
+    final focusValue = widget.entries.any((e) => e.value == widget.value)
+        ? widget.value
+        : (widget.entries.isEmpty ? null : widget.entries.first.value);
+
+    return MenuAnchor(
+      controller: _controller,
+      consumeOutsideTap: true,
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(Color(0xF01C1C1E)),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.glassBorder),
+          ),
+        ),
+        padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 6, horizontal: 4)),
+      ),
+      menuChildren: [
+        for (final e in widget.entries)
+          TvFocusable(
+            borderRadius: 10,
+            autofocus: e.value == focusValue,
+            onTap: () {
+              _controller.close();
+              widget.onSelected(e.value);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: e.value == widget.value ? Colors.white : Colors.transparent,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(e.label, style: const TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+      ],
+      builder: (context, controller, _) => PlayerButton(
+        tooltip: widget.tooltip,
+        onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+        child: widget.child,
+      ),
     );
   }
 }

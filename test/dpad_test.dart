@@ -57,13 +57,40 @@ void main() {
     await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
-    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    for (var i = 0; i < 6; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    }
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pump();
 
     expect(longPresses, 1, reason: 'one long-press per hold');
     expect(taps, 0, reason: 'a hold must not also fire the tap');
+  });
+
+  testWidgets('TvFocusable: a firm press (one key repeat) is still a TAP',
+      (tester) async {
+    // Regression: Android starts repeating ~400ms into a press, so a normal
+    // firm press on a TV remote emitted ONE repeat — which used to fire the
+    // long-press and swallow the tap. On a catalog tile that meant OK
+    // silently toggled the favourite and the player never opened
+    // ("se premo ok da telecomando non apre il player, non reagisce").
+    var taps = 0;
+    var longPresses = 0;
+    await tester.pumpWidget(wrap(TvFocusable(
+      autofocus: true,
+      onTap: () => taps++,
+      onLongPress: () => longPresses++,
+      child: const SizedBox(width: 100, height: 40, child: Text('tile')),
+    )));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    expect(taps, 1, reason: 'a firm press must still open the item');
+    expect(longPresses, 0, reason: 'one repeat is not a deliberate hold');
   });
 
   testWidgets('TvFocusable: without D-pad support (Windows) nothing takes focus',

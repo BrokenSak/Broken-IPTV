@@ -24,8 +24,6 @@ import '../../../state/player_settings_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 
-const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
 /// Desktop-only software gain on top of the 0–100 UI volume: IPTV streams are
 /// often encoded quiet, so UI 100% maps to mpv 150 (the UI keeps its normal
 /// 0–100 scale). Android stays at 1.0 — volume belongs to the hardware keys.
@@ -625,9 +623,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
-  void _toggleSubtitles() {
-    setState(() => _subtitlesOn = !_subtitlesOn);
-    _player.setSubtitleTrack(_subtitlesOn ? SubtitleTrack.auto() : SubtitleTrack.no());
+  /// Subtitles on/off, picked from the controls-bar dropdown.
+  void _setSubtitles(bool on) {
+    setState(() => _subtitlesOn = on);
+    _player.setSubtitleTrack(on ? SubtitleTrack.auto() : SubtitleTrack.no());
     _poke();
   }
 
@@ -669,11 +668,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _poke();
   }
 
-  void _cycleSpeed() {
-    final index = _speeds.indexWhere((s) => (s - _rate).abs() < 0.01);
-    final next = _speeds[(index + 1) % _speeds.length];
-    setState(() => _rate = next);
-    _player.setRate(next);
+  /// Playback speed, picked from the controls-bar dropdown (kPlaybackSpeeds).
+  void _setRate(double rate) {
+    setState(() => _rate = rate);
+    _player.setRate(rate);
     _poke();
   }
 
@@ -941,9 +939,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           _poke();
                         },
                         onMute: _toggleMute,
-                        onSubtitles: _toggleSubtitles,
+                        onSubtitlesChanged: _setSubtitles,
                         onAspect: _toggleAspect,
-                        onSpeed: _cycleSpeed,
+                        onRate: _setRate,
                       ),
                     ],
                   ),

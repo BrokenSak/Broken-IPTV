@@ -1,7 +1,7 @@
 {
-  "build": 24,
-  "version": "1.7.2",
-  "notes": "Lista episodi e canali nel player: aprendola col telecomando ora il cursore entra davvero nella lista (prima restava dietro, sul pulsante) e parte dall'episodio o canale che stai guardando, segnato con una barra bianca e la scritta In riproduzione.",
+  "build": 25,
+  "version": "1.8.0",
+  "notes": "Corretto il tasto OK del telecomando: una pressione decisa apriva il preferito invece del video, ora apre sempre. Velocita' e sottotitoli sono menu a tendina. Scorrendo la lista episodi il riquadro di selezione non si perde piu'.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

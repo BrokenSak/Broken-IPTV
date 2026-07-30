@@ -53,6 +53,22 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
   /// (not on episode 1) when the overlay opens.
   final _currentRowNode = FocusNode(debugLabel: 'episodes.current');
 
+  /// One focus node per episode, **owned by the state**.
+  ///
+  /// ⚠️ A ListView.builder destroys rows that scroll out of view, and with
+  /// them any focus node the row created — so scrolling with the D-pad kept
+  /// losing the focus ("gli episodi non rimangono sempre focussati"). Keeping
+  /// the nodes here means a recycled row re-attaches the SAME node, and the
+  /// focus survives the trip off-screen and back.
+  final _rowNodes = <String, FocusNode>{};
+
+  FocusNode _nodeFor(Episode e, {required bool current, required bool first}) {
+    if (current) return _currentRowNode;
+    if (first) return _firstRowNode;
+    return _rowNodes.putIfAbsent(
+        e.id, () => FocusNode(debugLabel: 'episode.${e.id}'));
+  }
+
   /// Whether the focus has already been pulled into the panel.
   bool _focusClaimed = false;
 
@@ -60,6 +76,9 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
   void dispose() {
     _firstRowNode.dispose();
     _currentRowNode.dispose();
+    for (final n in _rowNodes.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -186,6 +205,9 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
                         // and re-firing the first row's autofocus (D-pad).
                         key: ValueKey(season),
                         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                        // Build well beyond the viewport: directional focus can
+                        // only move to a row that EXISTS, so without this the
+                        // D-pad hit a wall at the last visible episode.
                         itemCount: episodes.length,
                         itemBuilder: (context, index) {
                           final Episode e = episodes[index];
@@ -193,14 +215,16 @@ class _EpisodeListOverlayState extends ConsumerState<EpisodeListOverlay> {
                           final image = e.imageUrl ?? widget.fallbackImage;
                           final progress = progressBy.forEpisode(widget.seriesId, e.id);
                           return TvFocusable(
+                            // Stable key: a recycled row must keep its state
+                            // (and stay attached to its own focus node).
+                            key: ValueKey(e.id),
                             borderRadius: 12,
                             // D-pad: enter the list right away when the
                             // overlay opens (policy-gated: TV only). The real
                             // entry point is _claimFocus() — see its note.
                             autofocus: index == 0,
-                            focusNode: selected
-                                ? _currentRowNode
-                                : (index == 0 ? _firstRowNode : null),
+                            focusNode:
+                                _nodeFor(e, current: selected, first: index == 0),
                             onTap: () => widget.onSelect(e),
                             child: DecoratedBox(
                               // The episode PLAYING right now: a solid white

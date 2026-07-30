@@ -67,6 +67,10 @@ Widget _chrome({
   Duration duration = const Duration(hours: 2),
   VoidCallback? onSettings,
   VoidCallback? onBack,
+  List<double>? rateCalls,
+  List<bool>? subtitleCalls,
+  double rate = 1.0,
+  bool subtitlesOn = false,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -120,8 +124,8 @@ Widget _chrome({
                 position: position,
                 duration: duration,
                 volume: 100,
-                rate: 1.0,
-                subtitlesOn: false,
+                rate: rate,
+                subtitlesOn: subtitlesOn,
                 aspect: VideoAspect.original,
                 skipSeconds: 10,
                 formatDuration: formatHms,
@@ -131,9 +135,9 @@ Widget _chrome({
                 onSeek: (d) => seekCalls?.add(d),
                 onVolume: (_) {},
                 onMute: () {},
-                onSubtitles: () {},
+                onSubtitlesChanged: (v) => subtitleCalls?.add(v),
                 onAspect: () {},
-                onSpeed: () {},
+                onRate: (v) => rateCalls?.add(v),
                 channelListOpen: false,
                 onChannelList: isLive ? () {} : null,
                 episodeListOpen: false,
@@ -259,6 +263,8 @@ void main() {
     await _pressOk(tester);
     expect(back, 1);
   });
+
+  group('funzioni e highlight', _functionAndHighlightTests);
 
   group('barra temporale', () {
     testWidgets('uno scattino sposta di pochi secondi, non a salti enormi',
@@ -410,4 +416,188 @@ class _TestHost extends StatelessWidget {
       child: Builder(builder: builder),
     );
   }
+}
+
+/// Functions + highlighting of the player controls, driven by the remote.
+/// Added on request ("crea un test per funzioni e highlight del player, ogni
+/// volta ci sta un problema"): every control must (a) be reachable, (b) show
+/// the white ring while the D-pad is on it, and (c) actually fire.
+void _functionAndHighlightTests() {
+  /// True when a focus ring is currently painted anywhere in the tree.
+  bool ringVisible(WidgetTester tester) {
+    for (final c in tester.widgetList<AnimatedContainer>(
+        find.byType(AnimatedContainer))) {
+      final d = c.decoration;
+      if (d is BoxDecoration && d.border != null) {
+        final side = (d.border as Border).top;
+        if (side.color == AppColors.focusRing && side.width > 0) return true;
+      }
+    }
+    return false;
+  }
+
+  testWidgets('ogni controllo mostra l\'anello bianco quando ci sei sopra',
+      (tester) async {
+    final node = FocusNode(debugLabel: 'primary');
+    addTearDown(node.dispose);
+    await tester.pumpWidget(_TestHost(
+      builder: (_) => _chrome(primaryNode: node, onSettings: () {}),
+    ));
+    await tester.pump();
+    node.requestFocus();
+    await tester.pump();
+
+    // Walk the whole bar; the ring must be painted at every single stop.
+    // NB: the ring lands one frame after the focus does (the Focus widget
+    // rebuilds its dependents on the next pump), so settle before looking.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump();
+      expect(ringVisible(tester), isTrue,
+          reason: 'no focus ring on "${_focusedLabel()}" — on TV that reads as '
+              '"non si capisce cosa ho selezionato"');
+      await _press(tester, LogicalKeyboardKey.arrowRight);
+    }
+  });
+
+  testWidgets('velocita\': e\' un menu a tendina e applica il valore scelto',
+      (tester) async {
+    final rates = <double>[];
+    final node = FocusNode(debugLabel: 'primary');
+    addTearDown(node.dispose);
+    await tester.pumpWidget(_TestHost(
+      builder: (_) => _chrome(primaryNode: node, rateCalls: rates, onSettings: () {}),
+    ));
+    await tester.pump();
+    node.requestFocus();
+    await tester.pump();
+
+    // Reach the speed dropdown and open it with OK.
+    for (var i = 0; i < 8 && _focusedLabel() != 'Velocità'; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(_focusedLabel(), 'Velocità');
+    await _pressOk(tester);
+    await tester.pumpAndSettle();
+
+    // A real menu, not a cycle button: every speed is listed.
+    expect(find.text('0.5x'), findsOneWidget);
+    expect(find.text('2x'), findsOneWidget);
+
+    // The focus opens on the CURRENT value (1x); Down picks the next one.
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    await _pressOk(tester);
+    await tester.pumpAndSettle();
+    expect(rates, isNotEmpty, reason: 'picking an entry must set the speed');
+    expect(rates.last, greaterThan(1.0));
+  });
+
+  testWidgets('sottotitoli: menu a tendina on/off', (tester) async {
+    final subs = <bool>[];
+    final node = FocusNode(debugLabel: 'primary');
+    addTearDown(node.dispose);
+    await tester.pumpWidget(_TestHost(
+      builder: (_) =>
+          _chrome(primaryNode: node, subtitleCalls: subs, onSettings: () {}),
+    ));
+    await tester.pump();
+    node.requestFocus();
+    await tester.pump();
+
+    for (var i = 0; i < 8 && _focusedLabel() != 'Sottotitoli'; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(_focusedLabel(), 'Sottotitoli');
+    await _pressOk(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sottotitoli on'), findsOneWidget);
+    expect(find.text('Sottotitoli off'), findsWidgets);
+
+    // Currently off → the focus sits on "off"; Down reaches "on".
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    await _pressOk(tester);
+    await tester.pumpAndSettle();
+    expect(subs.last, isTrue);
+  });
+
+  testWidgets('play/pausa, salti e aspetto sparano davvero', (tester) async {
+    var play = 0, back = 0, fwd = 0, aspect = 0;
+    final node = FocusNode(debugLabel: 'primary');
+    addTearDown(node.dispose);
+
+    await tester.pumpWidget(_TestHost(
+      builder: (_) => ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(navigationMode: NavigationMode.directional),
+                child: PlayerRootFocus(
+                  onKeyEvent: (_, _) => KeyEventResult.ignored,
+                  child: PlayerControlsPanel(
+                    playing: true,
+                    isLive: false,
+                    position: const Duration(minutes: 1),
+                    duration: const Duration(minutes: 10),
+                    volume: 100,
+                    rate: 1.0,
+                    subtitlesOn: false,
+                    aspect: VideoAspect.original,
+                    skipSeconds: 10,
+                    formatDuration: formatHms,
+                    onSkipBack: () => back++,
+                    onSkipForward: () => fwd++,
+                    onPlayPause: () => play++,
+                    onSeek: (_) {},
+                    onVolume: (_) {},
+                    onMute: () {},
+                    onSubtitlesChanged: (_) {},
+                    onAspect: () => aspect++,
+                    onRate: (_) {},
+                    channelListOpen: false,
+                    onChannelList: null,
+                    episodeListOpen: false,
+                    onEpisodeList: null,
+                    onNextEpisode: null,
+                    audioTracks: const [],
+                    currentAudioId: null,
+                    onSelectAudio: (_) {},
+                    showVolume: false,
+                    primaryFocusNode: node,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+    node.requestFocus();
+    await tester.pump();
+
+    // Play/pause is where the remote lands.
+    await _pressOk(tester);
+    expect(play, 1);
+
+    // Left = rewind, right = forward.
+    await _press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(_focusedLabel(), 'Indietro 10 s');
+    await _pressOk(tester);
+    expect(back, 1);
+
+    await _press(tester, LogicalKeyboardKey.arrowRight, 2);
+    expect(_focusedLabel(), 'Avanti 10 s');
+    await _pressOk(tester);
+    expect(fwd, 1);
+
+    // And the aspect toggle at the far right.
+    for (var i = 0; i < 6 && _focusedLabel() != 'Rapporto d\'aspetto'; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    await _pressOk(tester);
+    expect(aspect, 1);
+  });
 }

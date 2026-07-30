@@ -68,6 +68,14 @@ class _TvFocusableState extends State<TvFocusable> {
   bool _selectDown = false;
   bool _longPressFired = false;
 
+  /// Key-repeat events seen in the current OK press.
+  int _repeats = 0;
+
+  /// How many repeats make a hold. Android's first repeat lands ~400ms in and
+  /// the rest ~50ms apart, so this is roughly 0.6s of deliberate holding —
+  /// comfortably above a firm press, which must still be a plain tap.
+  static const _repeatsForLongPress = 4;
+
   /// Whether this element takes part in D-pad focus at all.
   static bool get _focusable => TvFocusable.debugDpadOverride ?? dpadFocusEnabled();
 
@@ -99,11 +107,21 @@ class _TvFocusableState extends State<TvFocusable> {
     if (event is KeyDownEvent) {
       _selectDown = true;
       _longPressFired = false;
+      _repeats = 0;
       return KeyEventResult.handled;
     }
     if (event is KeyRepeatEvent) {
       // Holding OK = long-press (used by "Continua a guardare" tiles on TV).
-      if (widget.onLongPress != null && !_longPressFired) {
+      //
+      // ⚠️ NOT on the first repeat. Android starts repeating ~400ms into a
+      // press, so a normally firm press on a TV remote produced one repeat →
+      // long-press → and the tap was swallowed: OK "did nothing" and the tile
+      // never opened (it silently toggled the favourite instead). A real hold
+      // has to keep going: repeats land ~50ms apart, so this is ~0.6s.
+      _repeats++;
+      if (widget.onLongPress != null &&
+          !_longPressFired &&
+          _repeats >= _repeatsForLongPress) {
         _longPressFired = true;
         widget.onLongPress!();
       }
@@ -113,6 +131,7 @@ class _TvFocusableState extends State<TvFocusable> {
       final shouldTap = _selectDown && !_longPressFired;
       _selectDown = false;
       _longPressFired = false;
+      _repeats = 0;
       if (shouldTap) widget.onTap();
       return KeyEventResult.handled;
     }
