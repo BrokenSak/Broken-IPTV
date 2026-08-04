@@ -545,7 +545,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _refocusPrimary() {
     if (!isTvMode()) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _controlsVisible) _primaryControlNode.requestFocus();
+      if (mounted && _controlsVisible && _isTopRoute) {
+        _primaryControlNode.requestFocus();
+      }
     });
   }
 
@@ -641,9 +643,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   ///
   /// Not when a floating shortcut has the focus — "Prossimo episodio" is meant
   /// to be one press away with the menu down.
+  /// Whether the player is still the screen on top.
+  ///
+  /// ⚠️ `mounted` is NOT enough: pushing Impostazioni (or anything else) from
+  /// the player leaves the player mounted **underneath**. Its timers keep
+  /// running, so five seconds later the auto-hide fired, called
+  /// [_claimRootFocus] and the covered player took the focus back — leaving the
+  /// screen ON TOP with nothing focused at all and a dead remote. Found on the
+  /// Firestick: opening Impostazioni from the player, no arrow or OK did
+  /// anything. Every focus request in here has to check this first.
+  bool get _isTopRoute => ModalRoute.of(context)?.isCurrent ?? true;
+
   void _claimRootFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _controlsVisible) return;
+      if (!mounted || _controlsVisible || !_isTopRoute) return;
       if (_channelListOpen || _episodeListOpen) return;
       if (_floatingActionNode.hasFocus) return;
       if (!_rootNode.hasPrimaryFocus) _rootNode.requestFocus();
@@ -659,7 +672,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // a focus ring appearing on a tap would just look odd.
       if (isTvMode()) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _controlsVisible) _primaryControlNode.requestFocus();
+          if (mounted && _controlsVisible && _isTopRoute) {
+            _primaryControlNode.requestFocus();
+          }
         });
       }
     }
@@ -883,7 +898,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (showNext && !_floatingFocusRequested && !_controlsVisible) {
         _floatingFocusRequested = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_controlsVisible) _floatingActionNode.requestFocus();
+          if (mounted && !_controlsVisible && _isTopRoute) {
+            _floatingActionNode.requestFocus();
+          }
         });
       } else if (!showNext) {
         _floatingFocusRequested = false;

@@ -1,7 +1,7 @@
 {
-  "build": 29,
-  "version": "1.8.4",
-  "notes": "Telecomando: la freccia \"indietro\" in alto a sinistra era un pulsante invisibile che si prendeva il primo OK, su ogni schermata. Ora si vede. E aprendo un film o una serie il cursore parte di nuovo dal pulsante \"Guarda\", non dall'indietro.",
+  "build": 30,
+  "version": "1.8.5",
+  "notes": "Telecomando: aprendo Impostazioni dal player, dopo pochi secondi il telecomando moriva — il player sotto si riprendeva il comando e la schermata sopra restava senza nulla di selezionato. Risolto.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
