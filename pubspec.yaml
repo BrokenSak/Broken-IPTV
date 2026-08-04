@@ -55,6 +55,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Drives the REAL app on the REAL Firestick (integration_test/). The widget
+  # tests cannot reach the player at all — it starts native libmpv in
+  # initState — which is exactly why its bugs kept surviving every audit.
+  integration_test:
+    sdk: flutter
   # Only for tests: flutter_riverpod 3 does not re-export the `Override` type
   # that the focus-audit helper needs in its signature.
   riverpod: ^3.3.2

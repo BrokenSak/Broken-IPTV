@@ -184,6 +184,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// the freshly saved progress without touching `ref` during dispose.
   late final SyncNotifier _sync;
 
+  /// Hooks for the on-device integration tests (integration_test/), the only
+  /// place this screen can actually run: it starts native libmpv in initState,
+  /// so no widget test on the dev host has ever executed a line of it — which
+  /// is precisely why its bugs kept surviving every audit.
+  ///
+  /// [currentPositionForTest] answers "is the video really playing?" — a black
+  /// screen with a perfectly healthy widget tree is a failure mode that has
+  /// shipped more than once.
+  @visibleForTesting
+  Duration get currentPositionForTest => _position;
+
+  @visibleForTesting
+  bool get controlsVisibleForTest => _controlsVisible;
+
   bool get _isSeries => widget.seriesId != null;
   bool get _isVod => widget.vodId != null;
   bool get _isLive => widget.isLive;
