@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/download_item.dart';
 import '../../../state/downloads_providers.dart';
+import '../../../data/models/watch_progress.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
@@ -216,17 +217,21 @@ class _DownloadTile extends ConsumerWidget {
       'name': item.episodeLabel ?? item.name,
       if (item.imageUrl != null) 'poster': item.imageUrl!,
     };
-    int resume = 0;
+    WatchProgress? progress;
     if (item.type == DownloadType.vod && item.vodId != null) {
       params['vodId'] = item.vodId!;
-      resume = wp.forVod(item.vodId!)?.positionMs ?? 0;
+      progress = wp.forVod(item.vodId!);
     } else if (item.seriesId != null && item.episodeId != null) {
       params['seriesId'] = item.seriesId!;
       params['episodeId'] = item.episodeId!;
       params['epLabel'] = item.episodeLabel ?? item.name;
-      resume = wp.forEpisode(item.seriesId!, item.episodeId!)?.positionMs ?? 0;
+      progress = wp.forEpisode(item.seriesId!, item.episodeId!);
     }
-    if (resume > 5000) params['resume'] = '$resume';
+    // Only a real resume point: a finished one asked the player to seek past
+    // the end, which it declined — and playback started from zero instead.
+    if (progress != null && progress.resumable) {
+      params['resume'] = '${progress.positionMs}';
+    }
     context.push(Uri(path: '/player', queryParameters: params).toString());
   }
 }

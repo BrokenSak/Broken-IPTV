@@ -34,18 +34,30 @@ class WatchProgressRepository {
     return list;
   }
 
-  /// One entry per series (latest watched episode), not-finished-or-latest,
-  /// most recent first.
+  /// One entry per series — the most recently played episode — most recent
+  /// first. A series qualifies when *any* of its episodes has real progress.
+  ///
+  /// ⚠️ The "any episode" part matters. The filter used to be on the latest
+  /// entry alone (`positionMs > 5000`), which meant that finishing an episode
+  /// removed the whole series: the auto-advance opens the next one, closing the
+  /// player records it at ~0s, and that fresh near-zero entry — the newest —
+  /// failed the filter. Seven episodes of Yellowstone watched and the series
+  /// was simply gone from "Continua a guardare". Pointing at the next episode
+  /// at 0:00 is exactly right; hiding the series is not.
   List<WatchProgress> continueSeries() {
     final bySeries = <String, WatchProgress>{};
+    final everStarted = <String>{};
     for (final p in getAll()) {
-      if (p.kind != WatchKind.series) continue;
+      if (p.kind != WatchKind.series || p.seriesId == null) continue;
+      if (p.positionMs > 5000) everStarted.add(p.seriesId!);
       final existing = bySeries[p.seriesId];
       if (existing == null || p.updatedAt > existing.updatedAt) {
         bySeries[p.seriesId!] = p;
       }
     }
-    final list = bySeries.values.where((p) => p.positionMs > 5000).toList()
+    final list = bySeries.values
+        .where((p) => everStarted.contains(p.seriesId))
+        .toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return list;
   }

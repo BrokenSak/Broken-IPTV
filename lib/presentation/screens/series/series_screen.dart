@@ -167,7 +167,10 @@ class _SeriesContinue extends ConsumerWidget {
               'episodeId': p.episodeId!,
               'epLabel': p.episodeLabel ?? '',
               if (p.imageUrl != null) 'poster': p.imageUrl!,
-              'resume': '${p.positionMs}',
+              // Only a genuinely resumable point. Sending a finished episode's
+              // position asked the player to seek past the end; it declined and
+              // started at zero — "riprende sempre dall'inizio".
+              if (p.resumable) 'resume': '${p.positionMs}',
             }).toString(),
           ),
           child: Column(

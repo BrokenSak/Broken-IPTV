@@ -280,7 +280,7 @@ class _EpisodeTile extends ConsumerWidget {
               'epLabel': label,
               // Continue-watching uses the series cover, not the episode still.
               'poster': ?fallbackImage,
-              if (progress != null && !progress.finished && progress.positionMs > 5000)
+              if (progress != null && progress.resumable)
                 'resume': '${progress.positionMs}',
             }).toString(),
           );

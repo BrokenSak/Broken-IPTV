@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/xtream_profile.dart';
 import '../../data/services/storage_service.dart';
 import '../../presentation/common/app_background.dart';
+import '../../presentation/common/dpad_focus_guard.dart';
 import '../../presentation/screens/onboarding/device_mode_screen.dart';
 import '../../presentation/screens/profiles/profiles_screen.dart';
 import '../../presentation/screens/profiles/add_profile_screen.dart';
@@ -43,7 +44,10 @@ String? _rootRedirect(BuildContext context, GoRouterState state) {
 
 // Each screen is wrapped so it paints its own opaque abstract background;
 // that makes a pushed page fully cover the previous one during transitions.
-Widget _bg(Widget child) => AppBackground(child: child);
+// [DpadFocusGuard] goes with it on every route: when a rebuild removes the
+// focused widget the remote is left with no target and OK stops working
+// everywhere (see the class doc) — the guard re-homes it.
+Widget _bg(Widget child) => DpadFocusGuard(child: AppBackground(child: child));
 
 final appRouter = GoRouter(
   initialLocation: '/home',

@@ -104,6 +104,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return _currentUrl;
   }
 
+  /// Title to store in the resume point — of what is playing *now*.
+  ///
+  /// ⚠️ This used to be `widget.channelName`, i.e. whatever the player was
+  /// opened with, so every episode reached by auto-advance or by the episode
+  /// list was filed under the previous episode's name. The user's saved data
+  /// showed it plainly: S01E02 labelled "1. …S01E01", S01E04 labelled
+  /// "3. …S01E03". [_title] already tracks the current media.
+  String get _currentName => _title ?? widget.channelName ?? '';
+
   bool _controlsVisible = true;
   Timer? _hideTimer;
 
@@ -138,6 +147,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   /// The control the D-pad lands on when the menu opens (play/pause, or the
   /// channel list button on live, which has no play/pause).
   final FocusNode _primaryControlNode = FocusNode(debugLabel: 'player.primary');
+
+  /// The screen-wide key catcher. Owned here (rather than left to `Focus`)
+  /// because it has to be re-claimed every time the controls go away — see
+  /// [_claimRootFocus] and [PlayerRootFocus].
+  final FocusNode _rootNode = FocusNode(debugLabel: 'player.root');
 
   /// The floating shortcut ("Prossimo episodio" / "Ricomincia da capo").
   /// Focused on TV as soon as it appears (with the controls down), so OK
@@ -414,6 +428,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return 'SD';
   }
 
+  /// The position already stored for whatever is playing, if any.
+  int? get _storedPositionMs {
+    final existing = _isVod
+        ? _watchProgress.forVod(widget.vodId!)
+        : (_currentEpisodeId == null
+            ? null
+            : _watchProgress.forEpisode(widget.seriesId!, _currentEpisodeId!));
+    return existing?.positionMs;
+  }
+
   void _maybeSaveProgress({bool force = false}) {
     if (_isLive || (!_isVod && !_isSeries)) return;
     final pos = _position.inMilliseconds;
@@ -421,6 +445,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (dur <= 0) return;
     // Throttle to roughly one write every 5 seconds.
     if (!force && (pos - _lastSavedMs).abs() < 5000) return;
+    // ⚠️ THE bug behind "riprende sempre dall'inizio": every save used to
+    // overwrite, and dispose() forces one — so opening a half-watched title and
+    // backing out before playback reached the saved point (a slow panel, the
+    // wrong film, a channel that won't start) stamped `positionMs ≈ 0` on top
+    // of it.
+    if (!shouldWriteProgress(positionMs: pos, existingPositionMs: _storedPositionMs)) {
+      return;
+    }
     _lastSavedMs = pos;
 
     final progress = _isVod
@@ -430,7 +462,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             seriesId: null,
             episodeId: null,
             episodeLabel: null,
-            name: widget.channelName ?? '',
+            name: _currentName,
             imageUrl: widget.posterUrl,
             url: _resumeUrl,
             positionMs: pos,
@@ -443,7 +475,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             seriesId: widget.seriesId,
             episodeId: _currentEpisodeId,
             episodeLabel: _currentEpisodeLabel,
-            name: widget.channelName ?? '',
+            name: _currentName,
             imageUrl: widget.posterUrl,
             url: _resumeUrl,
             positionMs: pos,
@@ -541,6 +573,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _restartTimer?.cancel();
     _primaryControlNode.dispose();
     _floatingActionNode.dispose();
+    _rootNode.dispose();
     for (final s in _subscriptions) {
       s.cancel();
     }
@@ -580,6 +613,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _hideControls() {
     _hideTimer?.cancel();
     if (_controlsVisible) setState(() => _controlsVisible = false);
+    _claimRootFocus();
+  }
+
+  /// Put the focus back on the screen-wide key catcher.
+  ///
+  /// ⚠️ Hiding the controls wraps them in `ExcludeFocus`, which takes the focus
+  /// off whichever button had it. Flutter then parks it on the enclosing
+  /// *scope* — an ancestor of [_rootNode], so key events stop bubbling through
+  /// it and the player goes deaf: five seconds after the last press, OK no
+  /// longer even reopened the menu. Nothing visible changes (the node draws
+  /// nothing and is out of the traversal ring), it just keeps the remote alive.
+  ///
+  /// Not when a floating shortcut has the focus — "Prossimo episodio" is meant
+  /// to be one press away with the menu down.
+  void _claimRootFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _controlsVisible) return;
+      if (_channelListOpen || _episodeListOpen) return;
+      if (_floatingActionNode.hasFocus) return;
+      if (!_rootNode.hasPrimaryFocus) _rootNode.requestFocus();
+    });
   }
 
   void _showControls() {
@@ -744,7 +798,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     int? pending;
     if (resume && widget.seriesId != null) {
       final p = _watchProgress.forEpisode(widget.seriesId!, episode.id);
-      if (p != null && !p.finished && p.positionMs > 5000) pending = p.positionMs;
+      // Same rule as everywhere else: a finished episode is re-watched from
+      // the start, not "resumed" to a point 4 seconds before the end.
+      if (p != null && p.resumable) pending = p.positionMs;
     }
     setState(() {
       _episodeListOpen = false;
@@ -817,6 +873,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       } else if (!showNext) {
         _floatingFocusRequested = false;
+        // The floating shortcut going away with the menu down would otherwise
+        // leave the focus nowhere, deafening the player (see _claimRootFocus).
+        if (!_controlsVisible) _claimRootFocus();
       }
     }
 
@@ -844,6 +903,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // gets stuck, which is what made the top bar and the right-hand controls
       // unreachable on TV.
       body: PlayerRootFocus(
+        focusNode: _rootNode,
         onKeyEvent: _handleKey,
         // NB: no MouseRegion onHover. The controls used to pop up on every
         // mouse move, which made the floating shortcuts pointless. They now

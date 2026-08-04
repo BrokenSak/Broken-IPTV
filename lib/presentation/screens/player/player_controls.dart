@@ -863,19 +863,30 @@ class _SkipButton extends StatelessWidget {
 ///
 /// It still takes focus on arrival (`autofocus`) and still receives every key
 /// event, because key events bubble from the focused descendant up to here.
+///
+/// ⚠️ …but ONLY from a focused descendant. Take [focusNode] and hold on to it:
+/// when the controls auto-hide they go into an `ExcludeFocus`, which strips the
+/// focus off the button that had it and leaves the *scope* holding it — and a
+/// scope is this node's ancestor, not its descendant, so nothing bubbles here
+/// any more. The result on TV was a player that stopped answering the remote
+/// five seconds in: OK could no longer even bring the controls back. The player
+/// re-claims this node whenever it hides them (see `_claimRootFocus`).
 class PlayerRootFocus extends StatelessWidget {
   const PlayerRootFocus({
     super.key,
     required this.onKeyEvent,
     required this.child,
+    this.focusNode,
   });
 
   final FocusOnKeyEventCallback onKeyEvent;
   final Widget child;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return Focus(
+      focusNode: focusNode,
       autofocus: true,
       skipTraversal: true,
       onKeyEvent: onKeyEvent,

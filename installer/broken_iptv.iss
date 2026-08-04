@@ -1,9 +1,9 @@
-; Inno Setup script for Broken IPTV (Windows)
+﻿; Inno Setup script for Broken IPTV (Windows)
 ; Compile with: ISCC.exe installer\broken_iptv.iss
 ; No admin rights required; single interactive page; dark theme.
 
 #define MyAppName "Broken IPTV"
-#define MyAppVersion "1.8.1"
+#define MyAppVersion "1.8.2"
 #define MyAppPublisher "Broken IPTV"
 #define MyAppExeName "broken_iptv.exe"
 #define MyBuildDir "..\build\windows\x64\runner\Release"

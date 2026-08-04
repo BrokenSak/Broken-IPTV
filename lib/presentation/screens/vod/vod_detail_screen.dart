@@ -24,6 +24,10 @@ class VodDetailScreen extends ConsumerWidget {
     final detail = ref.watch(vodDetailProvider(vodId));
     ref.watch(watchProgressProvider);
     final progress = ref.read(watchProgressProvider.notifier).forVod(vodId);
+    // A finished (or barely started) entry is not something to seek to: asking
+    // the player to jump past the end made it start at zero while the button
+    // still said "Riprendi".
+    final resumeMs = (progress != null && progress.resumable) ? progress.positionMs : 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Dettaglio film')),
@@ -112,19 +116,18 @@ class VodDetailScreen extends ConsumerWidget {
                             autofocus: true,
                             ringColor: Colors.black,
                             onTap: () => _play(context, ref, movie,
-                                resumeMs: progress?.positionMs ?? 0),
+                                resumeMs: resumeMs),
                             child: ExcludeFocus(
                               child: ElevatedButton.icon(
                                 onPressed: () => _play(context, ref, movie,
-                                    resumeMs: progress?.positionMs ?? 0),
+                                    resumeMs: resumeMs),
                                 icon: const Icon(Icons.play_arrow),
-                                label: Text(progress != null && !progress.finished
-                                    ? 'Riprendi'
-                                    : 'Guarda'),
+                                // "Riprendi" only when it really will resume.
+                                label: Text(resumeMs > 0 ? 'Riprendi' : 'Guarda'),
                               ),
                             ),
                           ),
-                          if (progress != null && !progress.finished)
+                          if (resumeMs > 0)
                             TvFocusable(
                               borderRadius: 14,
                               onTap: () => _play(context, ref, movie, resumeMs: 0),

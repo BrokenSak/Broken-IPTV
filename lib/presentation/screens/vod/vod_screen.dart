@@ -165,7 +165,7 @@ class _VodContinue extends ConsumerWidget {
               'name': p.name,
               'vodId': p.vodId!,
               if (p.imageUrl != null) 'poster': p.imageUrl!,
-              'resume': '${p.positionMs}',
+              if (p.resumable) 'resume': '${p.positionMs}',
             }).toString(),
           ),
           child: Column(
