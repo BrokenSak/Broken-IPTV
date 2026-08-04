@@ -68,6 +68,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
         title: TvTextFormField(
           controller: _controller,
           autofocus: true,

@@ -30,7 +30,11 @@ class VodDetailScreen extends ConsumerWidget {
     final resumeMs = (progress != null && progress.resumable) ? progress.positionMs : 0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dettaglio film')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: const Text('Dettaglio film'),
+      ),
       body: detail.when(
         data: (movie) {
           return SingleChildScrollView(

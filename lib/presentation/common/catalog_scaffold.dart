@@ -67,6 +67,8 @@ class _CatalogScaffoldState extends ConsumerState<CatalogScaffold> {
     final isFullscreen = ref.watch(fullscreenProvider);
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
         title: _searching
             ? TvTextFormField(
                 controller: _controller,

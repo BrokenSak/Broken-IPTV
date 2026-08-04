@@ -35,7 +35,11 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
     final detail = ref.watch(seriesDetailProvider(widget.seriesId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dettaglio serie')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: const Text('Dettaglio serie'),
+      ),
       body: detail.when(
         data: (series) {
           final seasons = series.episodesBySeason.keys.toList()..sort();

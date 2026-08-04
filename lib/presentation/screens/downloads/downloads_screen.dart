@@ -23,7 +23,11 @@ class DownloadsScreen extends ConsumerWidget {
     final items = ref.watch(downloadsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scaricati')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: const Text('Scaricati'),
+      ),
       body: items.isEmpty
           ? const Center(
               child: Padding(

@@ -100,11 +100,25 @@ class _FakeSeriesRepository extends SeriesRepository {
   Future<List<SeriesItem>> getAllItems() async => const [];
 }
 
+/// Audits the screen as a **pushed** route, not as the root one.
+///
+/// ⚠️ That difference is the whole reason this audit missed the back button.
+/// Every AppBar in the app relied on Flutter's automatic [BackButton] — a bare
+/// Material IconButton, whose focus is INVISIBLE with this theme — and it is
+/// the first stop in reading order. But `AppBar` only draws it when the route
+/// can pop, so pumping a screen at `/` hid the bug completely: on the real
+/// Firestick, arriving at "Nuova playlist" showed no selection anywhere and OK
+/// threw you out of the form. Nesting the screen under `/` gives the audit the
+/// same stack the app has.
 Widget _shell(Widget screen) {
   final router = GoRouter(
-    initialLocation: '/',
+    initialLocation: '/screen',
     routes: [
-      GoRoute(path: '/', builder: (_, _) => screen),
+      GoRoute(
+        path: '/',
+        builder: (_, _) => const Scaffold(body: Text('ROOT')),
+        routes: [GoRoute(path: 'screen', builder: (_, _) => screen)],
+      ),
       for (final path in const [
         '/player',
         '/live',

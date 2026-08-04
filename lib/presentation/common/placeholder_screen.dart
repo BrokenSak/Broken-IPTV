@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'tv_focusable.dart';
+
 /// Temporary scaffold used while a screen's real implementation is
 /// still pending in a later phase of the build.
 class PlaceholderScreen extends StatelessWidget {
@@ -11,7 +13,11 @@ class PlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: Text(title),
+      ),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -117,7 +117,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final selectedId = ref.watch(selectedProfileIdProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Impostazioni')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: const Text('Impostazioni'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

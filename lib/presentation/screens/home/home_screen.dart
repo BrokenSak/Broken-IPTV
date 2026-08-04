@@ -51,6 +51,8 @@ class HomeScreen extends ConsumerWidget {
       },
       child: Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
         titleSpacing: 20,
         centerTitle: true,
         title: Row(

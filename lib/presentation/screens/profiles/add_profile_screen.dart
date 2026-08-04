@@ -112,7 +112,11 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Modifica playlist' : 'Nuova playlist')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: Text(_isEditing ? 'Modifica playlist' : 'Nuova playlist'),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(

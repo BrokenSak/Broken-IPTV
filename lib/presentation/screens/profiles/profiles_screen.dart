@@ -19,6 +19,8 @@ class ProfilesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
         titleSpacing: 20,
         centerTitle: true,
         title: Row(

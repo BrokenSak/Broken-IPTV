@@ -135,7 +135,11 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
     final sync = ref.watch(syncProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sincronizzazione')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: tvBackButton(context),
+        title: const Text('Sincronizzazione'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

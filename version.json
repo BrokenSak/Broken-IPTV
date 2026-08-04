@@ -1,7 +1,7 @@
 {
-  "build": 27,
-  "version": "1.8.2",
-  "notes": "Riprende davvero dal punto giusto: aprire un film e uscire subito non cancella piu' il segnaposto, e \"Riprendi\" su una puntata gia' finita non riparte piu' da zero. Le serie non spariscono piu' da Continua a guardare quando finisci una puntata: ora ti mostra quella dopo. Su TV il telecomando non muore piu': dopo 5 secondi nel player OK riapre i controlli, e tornando da un video OK funziona ancora.",
+  "build": 28,
+  "version": "1.8.3",
+  "notes": "Telecomando: su ogni schermata la freccia \"indietro\" in alto a sinistra era un pulsante invisibile che si prendeva il primo OK — sembrava che non ci fosse niente selezionato e uscivi dalla schermata senza volerlo. Ora si vede.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

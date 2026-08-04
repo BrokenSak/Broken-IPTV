@@ -205,6 +205,33 @@ class _TvFocusableState extends State<TvFocusable> {
   }
 }
 
+/// The AppBar "back" control, visible to a D-pad. Returns null on a route that
+/// cannot pop, so it drops out exactly where Material's own would.
+///
+/// ⚠️ Found on the Firestick itself, 2026-08-04, by driving the real app with
+/// the real remote. NOT ONE AppBar in the app set a `leading:`, so every pushed
+/// screen got Flutter's automatic [BackButton] — a bare Material [IconButton],
+/// the one widget kind §7 forbids, because this theme (transparent
+/// `highlightColor` + NoSplash) makes its focus **invisible**. Being top-left it
+/// is also the first stop in reading order, so arriving on "Nuova playlist" the
+/// screen looked like nothing was selected at all and pressing OK — the obvious
+/// thing to do — threw you straight back out of the form.
+///
+/// Every audit missed it because `remote_focus_audit_test` pumps each screen as
+/// the ROOT route: with nothing to pop back to, AppBar draws no back button and
+/// the invisible stop does not exist. Pass `automaticallyImplyLeading: false`
+/// alongside this, or Material puts its own button back when this returns null.
+Widget? tvBackButton(BuildContext context) {
+  if (!Navigator.of(context).canPop()) return null;
+  return TvIconButton(
+    tooltip: 'Indietro',
+    icon: const Icon(Icons.arrow_back),
+    // maybePop, like Material's BackButton: it goes through PopScope, which the
+    // player and the home screen rely on to peel one layer at a time.
+    onPressed: () => Navigator.maybePop(context),
+  );
+}
+
 /// An icon button for app bars / toolbars that goes through [TvFocusable], so a
 /// D-pad focuses it with the same white ring as the rest of the app. A plain
 /// Material [IconButton] only shows a faint focus highlight here (the theme
