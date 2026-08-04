@@ -172,6 +172,25 @@ void main() {
           reason: 'REGRESSION: OK dead after the pane emptied out');
     });
 
+    testWidgets('does NOT grab the first focus while a screen is still loading',
+        (tester) async {
+      // ⚠️ Regression caught on the Firestick: the guard used to fire during
+      // the loading phase — when the only focusable thing is the AppBar back
+      // button — and take the focus there. The screen's real target then never
+      // got it, because Flutter honours `autofocus` only while the scope has no
+      // focused child. Arriving on a film's page the ring sat on "indietro",
+      // so OK left the page instead of playing.
+      final key = GlobalKey<_PaneState>();
+      await tester.pumpWidget(MaterialApp(home: _Pane(key: key, guard: true)));
+      // Nothing has ever been focused here.
+      key.currentState!.setItems(const []);
+      await tester.pump();
+      await tester.pump();
+
+      expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>(),
+          reason: 'the guard must leave the first focus to the screen itself');
+    });
+
     testWidgets('losing only the focused tile keeps the focus alive',
         (tester) async {
       final key = GlobalKey<_PaneState>();

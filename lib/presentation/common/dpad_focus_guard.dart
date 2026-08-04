@@ -43,6 +43,17 @@ class DpadFocusGuard extends StatefulWidget {
 class _DpadFocusGuardState extends State<DpadFocusGuard> {
   bool _scheduled = false;
 
+  /// Whether this route ever had a focused child.
+  ///
+  /// ⚠️ The guard must only put back a focus that was **lost**, never hand out
+  /// the first one. Without this it fired while a screen was still loading —
+  /// when the only focusable thing on it is the AppBar back button — and took
+  /// the focus there; the real target's `autofocus` was then ignored, because
+  /// Flutter honours autofocus only while the scope has no focused child.
+  /// Caught on the Firestick: arriving on a film's page the ring sat on
+  /// "indietro" instead of "Guarda", so OK left the page instead of playing.
+  bool _everHadFocus = false;
+
   /// Same gate as [TvFocusable]'s autofocus: the guard must only ever act
   /// where that widget would have honoured one.
   static bool get _enabled =>
@@ -74,11 +85,18 @@ class _DpadFocusGuardState extends State<DpadFocusGuard> {
 
   void _recover() {
     final scope = FocusScope.of(context);
+    if (scope.focusedChild != null) {
+      _everHadFocus = true;
+      return;
+    }
+    // Nothing focused here yet: leave it alone. Whatever this screen declared
+    // `autofocus` on is still on its way (catalogs and detail pages build their
+    // real content only once the network answers) and must get there first.
+    if (!_everHadFocus) return;
     // Act only when THIS route's scope is itself the primary focus: that is
-    // precisely "we are on top and nothing inside us is focused". If a dialog
-    // or another route holds it, the focus is somebody else's business.
+    // precisely "we are on top and the focus we had is gone". If a dialog or
+    // another route holds it, the focus is somebody else's business.
     if (!identical(FocusManager.instance.primaryFocus, scope)) return;
-    if (scope.focusedChild != null) return;
     final first = FocusTraversalGroup.of(context).findFirstFocus(scope, ignoreCurrentFocus: true);
     if (first != null && first != scope) first.requestFocus();
   }
