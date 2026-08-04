@@ -30,6 +30,20 @@ bool isVolumeKey(LogicalKeyboardKey k) =>
     k == LogicalKeyboardKey.audioVolumeDown ||
     k == LogicalKeyboardKey.audioVolumeMute;
 
+/// Back belongs to navigation, never to the controls.
+///
+/// ⚠️ It used to fall through to the catch-all below, so with the controls
+/// hidden a Back press was **swallowed to reopen them** instead of leaving.
+/// Pressing it again hid them, again reopened them… the player flip-flopped and
+/// wouldn't exit, and holding the button made it strobe on key repeat
+/// ("premendo back apre e chiude il player, fa robe strane"). Back is the
+/// business of `PopScope`, which already peels one layer at a time: overlay →
+/// controls → exit. The key handler must keep its hands off it.
+bool isBackKey(LogicalKeyboardKey k) =>
+    k == LogicalKeyboardKey.goBack ||
+    k == LogicalKeyboardKey.browserBack ||
+    k == LogicalKeyboardKey.escape;
+
 /// OK / Enter / gamepad A — the "select" key across remotes and keyboards.
 bool isSelectKey(LogicalKeyboardKey k) =>
     k == LogicalKeyboardKey.select ||
@@ -55,7 +69,8 @@ PlayerKeyAction playerKeyAction({
   bool isDesktop = false,
   bool isLive = false,
 }) {
-  if (isVolumeKey(key)) return PlayerKeyAction.ignore;
+  // Volume is the OS's, Back is the navigator's. Never ours, in any state.
+  if (isVolumeKey(key) || isBackKey(key)) return PlayerKeyAction.ignore;
   if (!isKeyDown) return PlayerKeyAction.ignore;
 
   if (isDesktop && !isLive) {

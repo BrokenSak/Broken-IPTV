@@ -1,7 +1,7 @@
 {
-  "build": 30,
-  "version": "1.8.5",
-  "notes": "Telecomando: aprendo Impostazioni dal player, dopo pochi secondi il telecomando moriva — il player sotto si riprendeva il comando e la schermata sopra restava senza nulla di selezionato. Risolto.",
+  "build": 31,
+  "version": "1.8.6",
+  "notes": "Telecomando: il tasto Indietro durante la riproduzione veniva mangiato dal player per riaprire i controlli invece di uscire — premendolo di nuovo li richiudeva, e tenendolo premuto lampeggiava apri/chiudi. Ora Indietro esce e basta.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

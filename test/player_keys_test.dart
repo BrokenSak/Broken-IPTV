@@ -7,6 +7,7 @@ import 'package:broken_iptv/presentation/screens/player/player_keys.dart';
 /// the player used to swallow the first key press to reveal its controls,
 /// which ate the volume key too — the volume only moved from the 2nd press.
 void main() {
+  _backKeyRules();
   const volumeKeys = [
     LogicalKeyboardKey.audioVolumeUp,
     LogicalKeyboardKey.audioVolumeDown,
@@ -177,5 +178,47 @@ void main() {
         PlayerKeyAction.ignore,
       );
     });
+  });
+}
+
+void _backKeyRules() {
+  group('Back non è mai roba del player', () {
+    // ⚠️ Regressione segnalata sul Firestick: "premendo back durante la
+    // riproduzione apre e chiude il player, fa robe strane". Back cadeva nel
+    // caso "qualsiasi tasto", quindi a controlli nascosti veniva CONSUMATO per
+    // riaprirli invece di uscire; premuto ancora li richiudeva, e tenuto
+    // premuto faceva apri/chiudi a raffica sui key-repeat. Back è di PopScope,
+    // che sbuccia già un livello per volta: overlay → controlli → uscita.
+    for (final key in [
+      LogicalKeyboardKey.goBack,
+      LogicalKeyboardKey.browserBack,
+      LogicalKeyboardKey.escape,
+    ]) {
+      test('${key.debugName}: ignorato a controlli nascosti', () {
+        expect(
+          playerKeyAction(key: key, isKeyDown: true, controlsVisible: false),
+          PlayerKeyAction.ignore,
+        );
+      });
+
+      test('${key.debugName}: ignorato a controlli visibili', () {
+        expect(
+          playerKeyAction(key: key, isKeyDown: true, controlsVisible: true),
+          PlayerKeyAction.ignore,
+        );
+      });
+
+      test('${key.debugName}: ignorato anche su desktop e sul live', () {
+        expect(
+          playerKeyAction(
+              key: key,
+              isKeyDown: true,
+              controlsVisible: false,
+              isDesktop: true,
+              isLive: true),
+          PlayerKeyAction.ignore,
+        );
+      });
+    }
   });
 }
