@@ -1,7 +1,7 @@
 {
-  "build": 32,
-  "version": "1.8.7",
-  "notes": "Nuova evidenziazione col telecomando: l'anello ora circonda l'elemento invece di tagliarne il bordo, segue gli angoli della card ed e' piu' spesso, cosi' si capisce a colpo d'occhio da divano dove sei.",
+  "build": 33,
+  "version": "1.8.8",
+  "notes": "Correzione: dopo il cambio dell'evidenziazione, i riquadri (a partire dai tre della home) si erano rimpiccioliti e l'anello risultava piu' grande dell'elemento che evidenziava. Ora tornano della misura giusta.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

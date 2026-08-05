@@ -171,6 +171,16 @@ class _TvFocusableState extends State<TvFocusable> {
               // the child's box; it takes no space, so nothing reflows and the
               // neighbours don't move (the sin that got scaling removed).
               child: Stack(
+                // ⚠️ passthrough, NOT the default. A Stack hands its
+                // non-positioned children LOOSE constraints, so the child
+                // shrank to its own content instead of filling the box its
+                // parent had sized — the home tiles came out small and the ring
+                // (drawn on the real box) ended up larger than the thing it was
+                // framing. Reported: "i tre pulsanti sono tutti piccoli e il
+                // riquadro è più grande di quello che hai evidenziato".
+                // passthrough forwards the parent's constraints untouched,
+                // which is what the old AnimatedContainer did.
+                fit: StackFit.passthrough,
                 clipBehavior: Clip.none,
                 children: [
                   widget.child,
