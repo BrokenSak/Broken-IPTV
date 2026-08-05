@@ -35,18 +35,12 @@ class TvFocusable extends StatefulWidget {
     this.borderRadius = 16,
     this.autofocus = false,
     this.focusNode,
-    this.ringColor,
   });
 
   final Widget child;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final double borderRadius;
-
-  /// Focus ring colour override. The default white ring disappears on a
-  /// white-filled child (selected playlist, floating player pill): those pass
-  /// black here — "se lo sfondo è bianco, il quadrato è nero" (user rule).
-  final Color? ringColor;
 
   /// Only honoured where a D-pad is expected (see [dpadAutofocusEnabled]).
   final bool autofocus;
@@ -160,9 +154,7 @@ class _TvFocusableState extends State<TvFocusable> {
           final softHint = !showRing && (_hovered || _pressed);
 
           // NB: no scaling. A focused tile used to grow, which made it spill
-          // over its neighbours and overlap their captions. The ring + glow
-          // carries the focus on its own, and the border width is constant
-          // (only the colour changes) so nothing shifts when focus moves.
+          // over its neighbours and overlap their captions.
           return MouseRegion(
             cursor: SystemMouseCursors.click,
             onEnter: _hoverEnabled ? (_) => setState(() => _hovered = true) : null,
@@ -174,32 +166,98 @@ class _TvFocusableState extends State<TvFocusable> {
               onTapDown: (_) => setState(() => _pressed = true),
               onTapUp: (_) => setState(() => _pressed = false),
               onTapCancel: () => setState(() => _pressed = false),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 130),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(widget.borderRadius),
-                  border: Border.all(
-                    color: showRing
-                        ? (widget.ringColor ?? AppColors.focusRing)
-                        : (softHint ? Colors.white38 : Colors.transparent),
-                    width: 3,
-                  ),
-                  boxShadow: showRing
-                      ? [
-                          // Kept tight: a wide/bright glow bleeds onto the
-                          // neighbours and makes them look selected too.
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            blurRadius: 12,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: widget.child,
+              // The ring is an OVERLAY that sits OUTSIDE the child, never a
+              // border on it — see [_FocusRing]. Clip.none lets it hang past
+              // the child's box; it takes no space, so nothing reflows and the
+              // neighbours don't move (the sin that got scaling removed).
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  widget.child,
+                  if (showRing || softHint)
+                    // Negative insets: the ring hangs outside the child on
+                    // every side. `Positioned` allows them; `Padding` asserts.
+                    Positioned(
+                      left: -_FocusRing.outset(showRing),
+                      top: -_FocusRing.outset(showRing),
+                      right: -_FocusRing.outset(showRing),
+                      bottom: -_FocusRing.outset(showRing),
+                      child: IgnorePointer(
+                        child: _FocusRing(
+                          radius: widget.borderRadius,
+                          strong: showRing,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The selection ring: a bright edge **around** the focused element, sitting on
+/// its own dark contact shadow.
+///
+/// Three things were wrong with the old treatment, all reported as "l'anello
+/// non è chiaro e non è preciso intorno all'elemento":
+///
+/// 1. It was a `Border` **inside** the box, so it landed on top of the child's
+///    own edge — it ate the card instead of surrounding it.
+/// 2. Its radius was whatever the call site passed (16, 14, 12, 24…) while the
+///    card underneath had its own, so the corners never agreed. Here the ring
+///    is **concentric**: the child's radius plus the gap it stands off by.
+/// 3. It carried a **white glow**. On a black catalog that reads fine; on a
+///    bright film poster the ring drowned in its own halo. There is no halo
+///    now — standing outside the element is what makes it legible, and it is
+///    also why per-call-site `ringColor: Colors.black` overrides are gone: the
+///    ring lands on the page background, never on a white fill.
+///
+/// It draws in an overlay with no layout cost, so unlike the scaling that was
+/// removed in an earlier round, nothing shifts and no neighbour gets covered.
+class _FocusRing extends StatelessWidget {
+  const _FocusRing({required this.radius, required this.strong});
+
+  /// The child's own corner radius. The ring adds [_gap] to stay concentric.
+  final double radius;
+
+  /// True for D-pad focus; false for the soft mouse-hover hint.
+  final bool strong;
+
+  /// How far the ring stands off the element. Small on purpose: the grids sit
+  /// on a 10px gutter (GridMetrics.spacing on Android), so a fat offset would
+  /// crowd the neighbouring tile.
+  static const _gap = 2.0;
+
+  /// Thicker where it is read from the sofa. 4px at three metres is about what
+  /// 2px is at a desk.
+  static double get _width => Platform.isWindows ? 3 : 4;
+
+  static double widthFor(bool strong) => strong ? _width : 1.5;
+
+  /// How far outside the child the ring's box starts.
+  static double outset(bool strong) => _gap + widthFor(strong);
+
+  @override
+  Widget build(BuildContext context) {
+    final width = widthFor(strong);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius + outset(strong)),
+        border: Border.all(
+          color: strong ? AppColors.focusRing : Colors.white38,
+          width: width,
+        ),
+        // ⚠️ NO boxShadow here. A BoxShadow is a FILLED rounded rect painted
+        // behind the box; with a border-only box its interior is transparent,
+        // so the shadow shows straight through and greys out the element it is
+        // meant to frame (caught on the Firestick: the focused tile's caption
+        // went dim while its neighbours stayed white). It isn't needed either —
+        // now that the ring stands outside the child it always lands on the
+        // page background, never on the artwork.
       ),
     );
   }

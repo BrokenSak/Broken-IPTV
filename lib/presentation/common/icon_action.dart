@@ -39,7 +39,6 @@ class IconAction extends StatelessWidget {
       label: tooltip,
       child: TvFocusable(
         borderRadius: 12,
-        ringColor: ringColor,
         autofocus: autofocus,
         onTap: onTap,
         child: Padding(

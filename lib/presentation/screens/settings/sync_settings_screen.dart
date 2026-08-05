@@ -186,7 +186,6 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                 child: TvFocusable(
                   borderRadius: 14,
                   // White chip → black focus ring (white would vanish on it).
-                  ringColor: Colors.black,
                   onTap: sync.running ? () {} : _save,
                   child: _ActionChip(
                     label: sync.running ? 'Sincronizzo…' : 'Salva e sincronizza',

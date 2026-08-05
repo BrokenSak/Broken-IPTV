@@ -32,7 +32,6 @@ class ErrorRetry extends StatelessWidget {
               autofocus: true,
               borderRadius: 14,
               // The button is white: black ring (white would vanish on it).
-              ringColor: Colors.black,
               onTap: onRetry,
               // ExcludeFocus: the inner button must not be a SECOND, invisible
               // focus stop nested in the TvFocusable (mouse clicks still land).

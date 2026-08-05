@@ -174,7 +174,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     // Black ring on the white (selected) chip — see §7.
-                    ringColor: _currentMode == DeviceMode.tv ? Colors.black : null,
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
                   ),
@@ -182,7 +181,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: TvFocusable(
-                    ringColor: _currentMode == DeviceMode.touch ? Colors.black : null,
                     onTap: () => _setMode(DeviceMode.touch),
                     child: _ModeChip(label: 'Telefono / Tablet', selected: _currentMode == DeviceMode.touch),
                   ),
@@ -204,9 +202,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
-                    ringColor: ref.watch(playerSettingsProvider).aspect == aspect
-                        ? Colors.black
-                        : null,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setAspect(aspect),
                     child: _ModeChip(
                       label: aspect.label,
@@ -252,9 +247,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
-                    ringColor: ref.watch(playerSettingsProvider).skipSeconds == s
-                        ? Colors.black
-                        : null,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setSkipSeconds(s),
                     child: _ModeChip(
                       label: '$s s',
@@ -336,7 +328,6 @@ class _PlaylistTile extends StatelessWidget {
               autofocus: autofocus,
               // The selected row is filled white: the default white focus ring
               // would vanish on it, so there the ring is black.
-              ringColor: selected ? Colors.black : null,
               onTap: onSelect,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
@@ -361,13 +352,11 @@ class _PlaylistTile extends StatelessWidget {
           IconAction(
               icon: Icons.edit_outlined,
               color: subFg,
-              ringColor: selected ? Colors.black : null,
               onTap: onEdit,
               tooltip: 'Modifica'),
           IconAction(
               icon: Icons.delete_outline,
               color: subFg,
-              ringColor: selected ? Colors.black : null,
               onTap: onDelete,
               tooltip: 'Elimina'),
           const SizedBox(width: 4),

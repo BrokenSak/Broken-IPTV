@@ -56,7 +56,6 @@ class ProfilesScreen extends ConsumerWidget {
           ? null
           : TvFocusable(
               borderRadius: 16,
-              ringColor: Colors.black,
               onTap: () => context.push('/profiles/add'),
               child: ExcludeFocus(
                 child: FloatingActionButton.extended(
@@ -108,7 +107,6 @@ class _EmptyState extends StatelessWidget {
           TvFocusable(
             borderRadius: 14,
             autofocus: true,
-            ringColor: Colors.black,
             onTap: onAdd,
             child: ExcludeFocus(
               child: ElevatedButton.icon(

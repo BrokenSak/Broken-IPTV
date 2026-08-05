@@ -425,8 +425,8 @@ class _TestHost extends StatelessWidget {
 void _functionAndHighlightTests() {
   /// True when a focus ring is currently painted anywhere in the tree.
   bool ringVisible(WidgetTester tester) {
-    for (final c in tester.widgetList<AnimatedContainer>(
-        find.byType(AnimatedContainer))) {
+    for (final c in tester.widgetList<DecoratedBox>(
+        find.byType(DecoratedBox))) {
       final d = c.decoration;
       if (d is BoxDecoration && d.border != null) {
         final side = (d.border as Border).top;

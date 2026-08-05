@@ -242,7 +242,6 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
             // button is not a second focus stop.
             TvFocusable(
               borderRadius: 14,
-              ringColor: Colors.black,
               onTap: () {
                 if (!_saving) _save();
               },

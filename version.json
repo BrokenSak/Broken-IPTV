@@ -1,7 +1,7 @@
 {
-  "build": 31,
-  "version": "1.8.6",
-  "notes": "Telecomando: il tasto Indietro durante la riproduzione veniva mangiato dal player per riaprire i controlli invece di uscire — premendolo di nuovo li richiudeva, e tenendolo premuto lampeggiava apri/chiudi. Ora Indietro esce e basta.",
+  "build": 32,
+  "version": "1.8.7",
+  "notes": "Nuova evidenziazione col telecomando: l'anello ora circonda l'elemento invece di tagliarne il bordo, segue gli angoli della card ed e' piu' spesso, cosi' si capisce a colpo d'occhio da divano dove sei.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

@@ -10,14 +10,19 @@ import 'package:broken_iptv/presentation/common/tv_focusable.dart';
 /// The reported bug: on the phone the first item stayed ringed and touch
 /// couldn't clear it. A node may still take focus on a phone (the remote has
 /// to work even if the mode is wrong), but it must look no different.
+/// The ring is an overlay drawn OUTSIDE the child, and it is only built while
+/// focus is actually shown — so "no ring" now means "no ring widget at all",
+/// not "a transparent border".
 Color? _ringColor(WidgetTester tester) {
-  final container = tester.widget<AnimatedContainer>(
-    find.descendant(
-      of: find.byType(TvFocusable),
-      matching: find.byType(AnimatedContainer),
-    ),
-  );
-  return (container.decoration as BoxDecoration).border?.top.color;
+  for (final box in tester.widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byType(TvFocusable),
+        matching: find.byType(DecoratedBox),
+      ))) {
+    final d = box.decoration;
+    if (d is BoxDecoration && d.border != null) return (d.border as Border).top.color;
+  }
+  return null;
 }
 
 Widget _wrap(FocusNode node) => MaterialApp(
@@ -62,7 +67,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(node.hasPrimaryFocus, isTrue);
-    expect(_ringColor(tester), Colors.transparent,
+    expect(_ringColor(tester), isNull,
         reason: 'no persistent ring on a phone — only touch feedback');
   });
 }

@@ -239,7 +239,6 @@ class PlayerFloatingAction extends StatelessWidget {
       focusNode: focusNode,
       // The pill is white: a white focus ring would vanish on it, so this one
       // is black (white glow stays, for the dark video behind).
-      ringColor: Colors.black,
       onTap: onPressed,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),

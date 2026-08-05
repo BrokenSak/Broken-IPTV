@@ -42,7 +42,6 @@ class _LiveTvScreenState extends ConsumerState<LiveTvScreen> {
           child: TvFocusable(
             borderRadius: 14,
             autofocus: true,
-            ringColor: Colors.black,
             onTap: () => context.push('/settings'),
             child: ExcludeFocus(
               child: ElevatedButton(

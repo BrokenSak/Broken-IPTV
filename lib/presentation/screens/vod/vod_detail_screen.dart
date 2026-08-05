@@ -118,7 +118,6 @@ class VodDetailScreen extends ConsumerWidget {
                           TvFocusable(
                             borderRadius: 14,
                             autofocus: true,
-                            ringColor: Colors.black,
                             onTap: () => _play(context, ref, movie,
                                 resumeMs: resumeMs),
                             child: ExcludeFocus(
