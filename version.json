@@ -1,7 +1,7 @@
 {
-  "build": 33,
-  "version": "1.8.8",
-  "notes": "Correzione: dopo il cambio dell'evidenziazione, i riquadri (a partire dai tre della home) si erano rimpiccioliti e l'anello risultava piu' grande dell'elemento che evidenziava. Ora tornano della misura giusta.",
+  "build": 34,
+  "version": "1.8.9",
+  "notes": "Due correzioni al telecomando. In Impostazioni la selezione non si ferma piu' sulle righe che non sono cliccabili (le diciture \"Rapporto d'aspetto predefinito\" e \"Salto avanti/indietro\"): ora scende direttamente sul controllo successivo. E l'evidenziazione della playlist ora coincide esattamente con il riquadro bianco, invece di essere piu' piccola.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

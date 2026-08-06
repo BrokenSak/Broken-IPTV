@@ -110,6 +110,15 @@ class _FakeSeriesRepository extends SeriesRepository {
 /// Firestick, arriving at "Nuova playlist" showed no selection anywhere and OK
 /// threw you out of the form. Nesting the screen under `/` gives the audit the
 /// same stack the app has.
+///
+/// ⚠️ The shell also installs `NavigationMode.directional`, exactly as
+/// `app.dart` does on Android — and that is not cosmetic. In directional mode
+/// `InkResponse._canRequestFocus` returns **true unconditionally**, so every
+/// Material ink surface in the tree becomes a D-pad stop *even with no
+/// `onTap`*: a label-only `ListTile` included. Under the default
+/// `traditional` mode those same nodes are unfocusable, so this audit used to
+/// pass while the real Firestick stopped the ring on plain captions — the
+/// "il focus deve essere solo su elementi cliccabili" the user reported.
 Widget _shell(Widget screen) {
   final router = GoRouter(
     initialLocation: '/screen',
@@ -139,7 +148,15 @@ Widget _shell(Widget screen) {
         ),
     ],
   );
-  return MaterialApp.router(theme: AppTheme.dark, routerConfig: router);
+  return MaterialApp.router(
+    theme: AppTheme.dark,
+    routerConfig: router,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(navigationMode: NavigationMode.directional),
+      child: child ?? const SizedBox.shrink(),
+    ),
+  );
 }
 
 /// Pumps a few frames without waiting for the tree to go quiet: several
@@ -152,11 +169,29 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 /// A focus stop that a remote user can actually SEE.
+///
+/// Sitting *somewhere under* a [TvFocusable] is not enough: a Material ink
+/// surface nested inside one (a [ListTile], an [InkWell], any button) owns a
+/// **second** focus node over the very same box, and it paints nothing with
+/// this theme. Worse, `TvFocusable._handleKey` bails out unless it holds the
+/// primary focus, so OK on that inner node does nothing at all. Those belong in
+/// `ExcludeFocus`. Hence: walk up and take whichever comes FIRST — the ink
+/// surface (invisible) or the TvFocusable/TvTextFormField that owns it.
 bool _isVisibleStop(FocusNode node) {
   final context = node.context;
   if (context == null) return false;
-  return context.findAncestorWidgetOfExactType<TvFocusable>() != null ||
-      context.findAncestorWidgetOfExactType<TvTextFormField>() != null;
+  var visible = false;
+  context.visitAncestorElements((element) {
+    final widget = element.widget;
+    if (widget is TvFocusable || widget is TvTextFormField) {
+      visible = true;
+      return false;
+    }
+    // InkWell extends InkResponse, so this covers every Material ink surface.
+    if (widget is InkResponse) return false;
+    return true;
+  });
+  return visible;
 }
 
 /// Walks the whole focus ring like a remote would, returning the stops that

@@ -128,7 +128,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Text('Playlist', style: _kSectionTitle),
           const SizedBox(height: 8),
           // Each playlist shows only its name; the selected one is filled white
-          // like the other setting chips. Edit/delete live on the box itself.
+          // like the other setting chips. Edit/delete sit beside that box, on
+          // the page background (see _PlaylistTile).
           // D-pad: the first item autofocuses, so entering Settings on TV
           // always has a visibly focused starting point.
           ...profiles.asMap().entries.map((e) => _PlaylistTile(
@@ -173,7 +174,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Expanded(
                   child: TvFocusable(
-                    // Black ring on the white (selected) chip — see §7.
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
                   ),
@@ -191,10 +191,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           const Text('Riproduzione', style: _kSectionTitle),
           const SizedBox(height: 8),
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.aspect_ratio),
-            title: Text('Rapporto d\'aspetto predefinito', style: _kItemTitle),
+          const _SettingLabel(
+            icon: Icons.aspect_ratio,
+            title: 'Rapporto d\'aspetto predefinito',
           ),
           Row(
             children: [
@@ -235,11 +234,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.forward_10),
-            title: Text('Salto avanti/indietro', style: _kItemTitle),
-            subtitle: Text('Solo film e serie', style: _kItemDesc),
+          const _SettingLabel(
+            icon: Icons.forward_10,
+            title: 'Salto avanti/indietro',
+            subtitle: 'Solo film e serie',
           ),
           Row(
             children: [
@@ -306,31 +304,38 @@ class _PlaylistTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = selected ? Colors.black : AppColors.textPrimary;
-    final subFg = selected ? Colors.black54 : AppColors.textSecondary;
     // Three side-by-side focus stops — select · modifica · elimina — instead of
     // the edit/delete buttons nested INSIDE the select area. A TV remote can't
     // move focus into a button that sits within the currently-focused node
     // (the D-pad found nothing to the "right" inside the tile), so with the old
     // layout modifica/elimina were unreachable by remote. As siblings the D-pad
     // steps left/right between them, each with its own focus ring.
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: selected ? Colors.white : Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
+    //
+    // ⚠️ The white surface is on the SELECT stop, not on the whole row. It used
+    // to be the row: the ring then framed only the name portion and came out
+    // visibly smaller than the box it was highlighting (reported — "il quadrato
+    // dell'highlight della playlist è più piccolo del quadrato stesso"). Do NOT
+    // "fix" that by insetting the three stops inside a row-wide card instead:
+    // that was tried and reverted, because the ring lands *on* the card and the
+    // selected card is WHITE — a white ring on white, invisible. Keeping
+    // modifica/elimina off the fill leaves every ring on the dark page
+    // background, and makes the highlighted rectangle the white surface itself.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           Expanded(
             child: TvFocusable(
               borderRadius: 14,
               autofocus: autofocus,
-              // The selected row is filled white: the default white focus ring
-              // would vanish on it, so there the ring is black.
               onTap: onSelect,
-              child: Padding(
+              child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white : Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
                 child: Row(
                   children: [
                     Icon(Icons.playlist_play, color: selected ? Colors.black : AppColors.accent),
@@ -349,17 +354,60 @@ class _PlaylistTile extends StatelessWidget {
               ),
             ),
           ),
+          // Room for the select ring, which stands 6px outside its box.
+          const SizedBox(width: 6),
+          // On the page background now, never on the white fill: one colour,
+          // and no black-on-black when the playlist is the selected one.
           IconAction(
-              icon: Icons.edit_outlined,
-              color: subFg,
-              onTap: onEdit,
-              tooltip: 'Modifica'),
+              icon: Icons.edit_outlined, onTap: onEdit, tooltip: 'Modifica'),
           IconAction(
-              icon: Icons.delete_outline,
-              color: subFg,
-              onTap: onDelete,
-              tooltip: 'Elimina'),
-          const SizedBox(width: 4),
+              icon: Icons.delete_outline, onTap: onDelete, tooltip: 'Elimina'),
+        ],
+      ),
+    );
+  }
+}
+
+/// The caption above a row of chips ("Rapporto d'aspetto predefinito", "Salto
+/// avanti/indietro"): an icon, a title and an optional description.
+///
+/// ⚠️ Deliberately **not** a [ListTile]. A ListTile always builds an [InkWell],
+/// and on Android — where `app.dart` installs `NavigationMode.directional` —
+/// `InkResponse` reports `canRequestFocus: true` whatever its callbacks are.
+/// So these captions, which have no `onTap` and nothing to activate, were real
+/// D-pad stops that painted no ring: coming down through Impostazioni the
+/// selection simply vanished on them ("il focus deve essere solo su elementi
+/// cliccabili, non su tutte le voci"). Passing `enabled: false` does not help —
+/// directional mode overrides that too. Plain widgets: no ink, no stop.
+class _SettingLabel extends StatelessWidget {
+  const _SettingLabel({required this.icon, required this.title, this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Matches the vertical rhythm of the ListTiles it replaced.
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.textSecondary),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: _kItemTitle),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle!, style: _kItemDesc),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );

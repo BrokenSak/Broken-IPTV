@@ -140,33 +140,58 @@ void main() {
   });
 
   testWidgets(
-      'TvFocusable: OK on an inner focused button activates the button, '
-      'not the tile', (tester) async {
+      'TvFocusable: a widget nested inside it can never take the focus',
+      (tester) async {
+    // This asserted the OPPOSITE until the 64th round: a nested IconButton kept
+    // its own focus and OK went to it. That design is gone — an inner Material
+    // control is a stop the D-pad cannot see (no ring with this theme) and, on
+    // Android's `NavigationMode.directional`, ink surfaces are focusable even
+    // with no callbacks at all, so the nesting produced dead stops on plain
+    // captions. Actions that must be reachable are SIBLINGS now (see
+    // IconAction and the playlist rows), and TvFocusable excludes its subtree.
     var tileTaps = 0;
     var buttonTaps = 0;
+    final tileFocus = FocusNode();
     final buttonFocus = FocusNode();
+    addTearDown(tileFocus.dispose);
     addTearDown(buttonFocus.dispose);
 
-    await tester.pumpWidget(wrap(TvFocusable(
-      onTap: () => tileTaps++,
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Text('tile'),
-        IconButton(
-          focusNode: buttonFocus,
-          icon: const Icon(Icons.edit),
-          onPressed: () => buttonTaps++,
-        ),
-      ]),
+    await tester.pumpWidget(wrap(MediaQuery(
+      // As on Android, where this is what makes bare ink surfaces focusable.
+      data: const MediaQueryData(navigationMode: NavigationMode.directional),
+      child: TvFocusable(
+        focusNode: tileFocus,
+        onTap: () => tileTaps++,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Text('tile'),
+          IconButton(
+            focusNode: buttonFocus,
+            icon: const Icon(Icons.edit),
+            onPressed: () => buttonTaps++,
+          ),
+        ]),
+      ),
     )));
+
     buttonFocus.requestFocus();
     await tester.pump();
+    expect(buttonFocus.hasPrimaryFocus, isFalse,
+        reason: 'an inner control must not be able to hold the D-pad focus');
 
+    // OK therefore always reaches the tile, wherever the ring happens to be.
+    tileFocus.requestFocus();
+    await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pump();
 
+    expect(tileTaps, 1);
+    expect(buttonTaps, 0);
+
+    // ...and the pointer still works: ExcludeFocus takes focus away, not taps.
+    await tester.tap(find.byIcon(Icons.edit));
+    await tester.pump();
     expect(buttonTaps, 1);
-    expect(tileTaps, 0);
   });
 
   testWidgets(

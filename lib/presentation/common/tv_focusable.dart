@@ -183,7 +183,21 @@ class _TvFocusableState extends State<TvFocusable> {
                 fit: StackFit.passthrough,
                 clipBehavior: Clip.none,
                 children: [
-                  widget.child,
+                  // ⚠️ Nothing in here may be a focus stop of its own. Android
+                  // runs under `NavigationMode.directional` (app.dart), and in
+                  // that mode `InkResponse._canRequestFocus` returns **true
+                  // unconditionally** — so every Material ink surface nested
+                  // here (a ListTile, a Chip, any button) owns a SECOND focus
+                  // node over the same box. It paints no ring with this theme,
+                  // and [_handleKey] above bails out unless *this* node holds
+                  // the primary focus, so OK on it does nothing: an invisible
+                  // dead stop. §7 already forbade putting focusable widgets in
+                  // here; this enforces it once instead of asking every call
+                  // site to remember an `ExcludeFocus`.
+                  // NB no layout cost: Focus adds no render object, so the
+                  // Stack still sees exactly one child and `passthrough` keeps
+                  // handing it the parent's constraints.
+                  ExcludeFocus(child: widget.child),
                   if (showRing || softHint)
                     // Negative insets: the ring hangs outside the child on
                     // every side. `Positioned` allows them; `Padding` asserts.

@@ -14,7 +14,6 @@ class IconAction extends StatelessWidget {
     required this.onTap,
     this.color = AppColors.textSecondary,
     this.tooltip,
-    this.ringColor,
     this.autofocus = false,
   });
 
@@ -26,11 +25,6 @@ class IconAction extends StatelessWidget {
   /// Only honoured where a D-pad is expected (see [dpadAutofocusEnabled]).
   /// Used when this icon is the first focusable thing on a screen.
   final bool autofocus;
-
-  /// Focus ring override: pass black when the action sits on a white surface
-  /// (e.g. the selected, white-filled playlist row), where the default white
-  /// ring would be invisible.
-  final Color? ringColor;
 
   @override
   Widget build(BuildContext context) {
