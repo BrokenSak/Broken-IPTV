@@ -281,10 +281,13 @@ void main() {
   });
 
   testWidgets('sincronizzazione', (tester) async {
+    // ⚠️ This used to pass `expectAutofocus: false` with a comment claiming the
+    // screen "opens on a text field wrapper". It did not: on the Firestick it
+    // opened with NOTHING focused — OK did nothing and the first arrow jumped
+    // up to the back button. The exemption hid it, so the assertion is on now
+    // (the first field asks for navigation focus).
     await _auditScreen(tester, const SyncSettingsScreen(),
-        name: 'Sincronizzazione',
-        // The screen opens on a text field wrapper, not a TvFocusable button.
-        expectAutofocus: false);
+        name: 'Sincronizzazione');
   });
 
   testWidgets('playlist: vuota e con una playlist salvata', (tester) async {

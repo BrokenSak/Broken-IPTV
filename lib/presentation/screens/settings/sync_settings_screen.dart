@@ -152,6 +152,11 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
           const SizedBox(height: 20),
           TvTextFormField(
             controller: _codeCtrl,
+            // The remote's landing spot. Without it this screen opened with
+            // NOTHING focused: OK did nothing at all, and the first arrow press
+            // jumped up to the back button (seen on the Firestick). Navigation
+            // focus, not editing — the keyboard should not pop up by itself.
+            autofocusNavigation: true,
             inputFormatters: const [SyncCodeFormatter()],
             decoration: InputDecoration(
               labelText: 'Codice di sincronizzazione',
@@ -185,7 +190,6 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
               Expanded(
                 child: TvFocusable(
                   borderRadius: 14,
-                  // White chip → black focus ring (white would vanish on it).
                   onTap: sync.running ? () {} : _save,
                   child: _ActionChip(
                     label: sync.running ? 'Sincronizzo…' : 'Salva e sincronizza',

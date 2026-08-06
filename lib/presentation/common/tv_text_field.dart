@@ -25,6 +25,7 @@ class TvTextFormField extends StatefulWidget {
     this.validator,
     this.onChanged,
     this.autofocus = false,
+    this.autofocusNavigation = false,
     this.style,
     this.inputFormatters,
   });
@@ -40,6 +41,18 @@ class TvTextFormField extends StatefulWidget {
   /// In TV mode this focuses the inner field (keyboard open, editing) right
   /// away — used by the search screens where typing is the whole point.
   final bool autofocus;
+
+  /// In TV mode this lands the focus on the **navigation wrapper** instead: the
+  /// field shows its focus outline, no keyboard opens, and OK is what starts
+  /// editing. Use it on the first field of a form, so a remote arriving on the
+  /// screen has something selected.
+  ///
+  /// ⚠️ Without it a form opens with **nothing focused at all**: found on the
+  /// Firestick on Impostazioni → Sincronizzazione, where OK did nothing until
+  /// an arrow was pressed, and the first arrow jumped up to the back button.
+  /// [autofocus] is not the answer there — it would pop the keyboard open on a
+  /// screen the user only came to read.
+  final bool autofocusNavigation;
 
   final TextStyle? style;
   final List<TextInputFormatter>? inputFormatters;
@@ -128,6 +141,13 @@ class _TvTextFormFieldState extends State<TvTextFormField> {
 
     return Focus(
       focusNode: _wrapperNode,
+      // ⚠️ Flutter's own `autofocus`, NOT a requestFocus() in initState. A
+      // manual request runs before the pushed route becomes current, and the
+      // Navigator then re-seeds the scope's focus and drops it — verified on the
+      // Firestick, where the screen still opened with nothing selected while the
+      // widget test happily passed. `autofocus` registers with the enclosing
+      // scope instead, which applies it once the scope actually gets the focus.
+      autofocus: widget.autofocusNavigation && !widget.autofocus,
       onKeyEvent: _handleWrapperKey,
       child: Builder(
         builder: (context) {

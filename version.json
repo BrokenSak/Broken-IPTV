@@ -1,7 +1,7 @@
 {
-  "build": 34,
-  "version": "1.8.9",
-  "notes": "Due correzioni al telecomando. In Impostazioni la selezione non si ferma piu' sulle righe che non sono cliccabili (le diciture \"Rapporto d'aspetto predefinito\" e \"Salto avanti/indietro\"): ora scende direttamente sul controllo successivo. E l'evidenziazione della playlist ora coincide esattamente con il riquadro bianco, invece di essere piu' piccola.",
+  "build": 35,
+  "version": "1.8.10",
+  "notes": "Correzione al telecomando: la schermata Impostazioni > Sincronizzazione si apriva senza niente di selezionato, quindi OK non faceva nulla e la prima freccia saltava sul pulsante Indietro in alto. Ora arrivando si parte dal campo del codice.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
