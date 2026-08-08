@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../core/format.dart';
+import '../../../core/fullscreen.dart';
 import '../../../core/pip.dart';
 import '../../../core/playback_activity.dart';
 import '../../../data/models/series_item.dart';
@@ -29,6 +30,9 @@ import '../../../state/watch_progress_providers.dart';
 /// often encoded quiet, so UI 100% maps to mpv 150 (the UI keeps its normal
 /// 0–100 scale). Android stays at 1.0 — volume belongs to the hardware keys.
 final double _volumeBoost = Platform.isAndroid ? 1.0 : 1.5;
+
+/// How far one press of ↑/↓ moves the 0–100 volume on Windows.
+const double _volumeKeyStep = 5;
 
 
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -719,7 +723,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       case PlayerKeyAction.seekBackward:
         _skip(-skip);
         return KeyEventResult.handled;
+      case PlayerKeyAction.volumeUp:
+        _nudgeVolume(_volumeKeyStep);
+        return KeyEventResult.handled;
+      case PlayerKeyAction.volumeDown:
+        _nudgeVolume(-_volumeKeyStep);
+        return KeyEventResult.handled;
     }
+  }
+
+  /// Windows ↑/↓: move the 0–100 volume by [delta] and remember it, exactly as
+  /// dragging the slider does. The controls are poked so the slider and its
+  /// percentage are on screen while the volume moves — otherwise a key press
+  /// changes the sound with nothing to show for it.
+  void _nudgeVolume(double delta) {
+    final next = (_volume + delta).clamp(0.0, 100.0);
+    if (next != _volume) {
+      _applyVolume(next);
+      // The player's volume stream echoes the value back, but a frame later:
+      // set it here too so the slider tracks the key without lagging behind.
+      setState(() => _volume = next);
+      ref.read(playerSettingsProvider.notifier).setVolume(next);
+    }
+    _poke();
   }
 
   void _togglePlayPause() {
@@ -885,6 +911,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // D-pad stop *outside* the panel, stranding the focus behind it.
     final showFloating = (showNext || showRestart) && !overlayOpen;
 
+    // Windows fullscreen: no arrow parked on top of the video. It reappears
+    // with the controls (a click or any key brings them back).
+    final hidePointer = hidePointerOverVideo(
+      isDesktop: Platform.isWindows,
+      isFullscreen: ref.watch(fullscreenProvider),
+      uiVisible: _controlsVisible || overlayOpen,
+    );
+
     // The inline "Prossimo episodio" control lives in the bar as a fallback for
     // whenever the floating one isn't up (i.e. not near the end) — otherwise
     // there's no way to jump to the next episode mid-play (user request).
@@ -940,7 +974,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // mouse move, which made the floating shortcuts pointless. They now
         // open only on an explicit action — tap, click, or OK (see _handleKey
         // and the tap catcher) — and close on tap again or after 5s idle.
-        child: Stack(
+        // This MouseRegion only sets the *cursor*, it listens to nothing.
+        child: MouseRegion(
+          cursor:
+              hidePointer ? SystemMouseCursors.none : MouseCursor.defer,
+          child: Stack(
             children: [
               Positioned.fill(
                 child: _error != null
@@ -1094,6 +1132,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
             ],
           ),
+        ),
       ),
       ),
     );

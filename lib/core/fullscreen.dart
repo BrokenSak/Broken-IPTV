@@ -11,6 +11,25 @@ import 'package:window_manager/window_manager.dart';
 /// window must stay windowed by default.
 bool get fullscreenToggleAvailable => !Platform.isAndroid;
 
+/// Whether the mouse pointer must be hidden over the player's video.
+///
+/// Windows only — Android has no pointer. Watching **fullscreen** with the
+/// controls down, the arrow just sits on top of the picture (user request: "su
+/// windows a full screen deve sparire la freccia del mouse").
+///
+/// It comes back as soon as any UI is up ([uiVisible]: the controls bar or a
+/// list overlay), and *anything* brings that up — a click, a key press — so
+/// there is no state where the pointer is both gone and unreachable.
+/// Deliberately NOT driven by mouse movement: the player must not react to
+/// hover at all (a `MouseRegion.onHover` used to pop the controls open on every
+/// twitch of the mouse, which is why it was removed — see player_screen).
+bool hidePointerOverVideo({
+  required bool isDesktop,
+  required bool isFullscreen,
+  required bool uiVisible,
+}) =>
+    isDesktop && isFullscreen && !uiVisible;
+
 /// (Re)applies Android's permanent immersive mode. Called at startup and again
 /// on every resume: the system restores the bars after dialogs, the keyboard
 /// or an app switch, and fullscreen here must not be defeatable.

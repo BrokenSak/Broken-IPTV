@@ -22,6 +22,12 @@ enum PlayerKeyAction {
   playPause,
   seekForward,
   seekBackward,
+
+  /// Windows ↑/↓: one step of the player's own 0–100 volume. Unlike the OS
+  /// volume keys above these are ours to consume — the arrows are dead on
+  /// Windows anyway (suppressed in app.dart).
+  volumeUp,
+  volumeDown,
 }
 
 /// Volume keys belong to the OS — the player must never react to them.
@@ -55,9 +61,14 @@ bool isSelectKey(LogicalKeyboardKey k) =>
 ///
 /// On **desktop** (Windows: mouse + keyboard) the arrows are otherwise dead
 /// (globally suppressed in app.dart so they can't drive focus traversal), so
-/// the player repurposes them: Space toggles play/pause, ←/→ seek. Not on TV,
-/// where the arrows are the D-pad and would clash with navigation, and not for
-/// live (no pause/seek).
+/// the player repurposes them: Space toggles play/pause, ←/→ seek, **↑/↓
+/// volume**. Not on TV, where the arrows are the D-pad and would clash with
+/// navigation.
+///
+/// ↑/↓ work on **live too** — only pause and seek are meaningless there, the
+/// volume is not (user request: "su windows freccia su e giu devono alzare e
+/// abbassare volume"). That's why the volume check sits outside the `!isLive`
+/// block.
 ///
 /// Otherwise: once the controls are up every key belongs to them (OK presses
 /// the focused button, arrows traverse); when hidden, any key reveals them.
@@ -73,10 +84,18 @@ PlayerKeyAction playerKeyAction({
   if (isVolumeKey(key) || isBackKey(key)) return PlayerKeyAction.ignore;
   if (!isKeyDown) return PlayerKeyAction.ignore;
 
-  if (isDesktop && !isLive) {
-    if (key == LogicalKeyboardKey.space) return PlayerKeyAction.playPause;
-    if (key == LogicalKeyboardKey.arrowRight) return PlayerKeyAction.seekForward;
-    if (key == LogicalKeyboardKey.arrowLeft) return PlayerKeyAction.seekBackward;
+  if (isDesktop) {
+    if (key == LogicalKeyboardKey.arrowUp) return PlayerKeyAction.volumeUp;
+    if (key == LogicalKeyboardKey.arrowDown) return PlayerKeyAction.volumeDown;
+    if (!isLive) {
+      if (key == LogicalKeyboardKey.space) return PlayerKeyAction.playPause;
+      if (key == LogicalKeyboardKey.arrowRight) {
+        return PlayerKeyAction.seekForward;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        return PlayerKeyAction.seekBackward;
+      }
+    }
   }
 
   if (!controlsVisible) return PlayerKeyAction.revealControls;

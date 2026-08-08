@@ -1,7 +1,7 @@
 {
-  "build": 35,
-  "version": "1.8.10",
-  "notes": "Correzione al telecomando: la schermata Impostazioni > Sincronizzazione si apriva senza niente di selezionato, quindi OK non faceva nulla e la prima freccia saltava sul pulsante Indietro in alto. Ora arrivando si parte dal campo del codice.",
+  "build": 36,
+  "version": "1.8.11",
+  "notes": "Windows: le frecce Su e Giù ora alzano e abbassano il volume del player, e a schermo intero la freccia del mouse sparisce dal video (ricompare al primo clic o tasto, insieme ai controlli).",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

@@ -167,6 +167,92 @@ void main() {
       );
     });
 
+    test('↑/↓ alzano e abbassano il volume, a controlli aperti o chiusi', () {
+      for (final visible in [true, false]) {
+        expect(
+          playerKeyAction(
+            key: LogicalKeyboardKey.arrowUp,
+            isKeyDown: true,
+            controlsVisible: visible,
+            isDesktop: true,
+          ),
+          PlayerKeyAction.volumeUp,
+        );
+        expect(
+          playerKeyAction(
+            key: LogicalKeyboardKey.arrowDown,
+            isKeyDown: true,
+            controlsVisible: visible,
+            isDesktop: true,
+          ),
+          PlayerKeyAction.volumeDown,
+        );
+      }
+    });
+
+    test('il volume con ↑/↓ vale anche sul live (a differenza di pausa/seek)',
+        () {
+      expect(
+        playerKeyAction(
+          key: LogicalKeyboardKey.arrowUp,
+          isKeyDown: true,
+          controlsVisible: false,
+          isDesktop: true,
+          isLive: true,
+        ),
+        PlayerKeyAction.volumeUp,
+      );
+      expect(
+        playerKeyAction(
+          key: LogicalKeyboardKey.arrowDown,
+          isKeyDown: true,
+          controlsVisible: true,
+          isDesktop: true,
+          isLive: true,
+        ),
+        PlayerKeyAction.volumeDown,
+      );
+    });
+
+    test('↑/↓ NON toccano il volume su TV: lì sono il D-pad', () {
+      // isDesktop di default = false (TV/telefono): le frecce devono restare
+      // navigazione, altrimenti il telecomando non può più salire/scendere tra
+      // i controlli.
+      expect(
+        playerKeyAction(
+          key: LogicalKeyboardKey.arrowUp,
+          isKeyDown: true,
+          controlsVisible: true,
+        ),
+        PlayerKeyAction.pokeAndPass,
+      );
+      expect(
+        playerKeyAction(
+          key: LogicalKeyboardKey.arrowDown,
+          isKeyDown: true,
+          controlsVisible: false,
+        ),
+        PlayerKeyAction.revealControls,
+      );
+    });
+
+    test('il volume si muove solo sul key-down, non sul rilascio', () {
+      for (final key in [
+        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowDown,
+      ]) {
+        expect(
+          playerKeyAction(
+            key: key,
+            isKeyDown: false,
+            controlsVisible: true,
+            isDesktop: true,
+          ),
+          PlayerKeyAction.ignore,
+        );
+      }
+    });
+
     test('only key-down acts (holding does not thrash play/pause)', () {
       expect(
         playerKeyAction(
