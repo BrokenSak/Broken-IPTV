@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,8 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui_mode.dart';
 import '../../../data/models/xtream_profile.dart';
+import '../../../data/services/provisioning_service.dart';
 import '../../../data/services/xtream_api_service.dart';
 import '../../../state/profile_providers.dart';
+import '../../../state/provisioning_providers.dart';
 import '../../common/tv_focusable.dart';
 import '../../common/tv_text_field.dart';
 
@@ -32,6 +36,10 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
   bool _saving = false;
   late PlaylistKind _kind;
 
+  /// Set only on the first-playlist screen: see [_waitForPlaylist].
+  Timer? _provisionTimer;
+  bool _checking = false;
+
   bool get _isEditing => widget.existingProfile != null;
 
   @override
@@ -51,10 +59,48 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
         if (pw != null && mounted) _passwordController.text = pw;
       });
     }
+
+    // First playlist ever: the owner may be filling it in from the panel right
+    // now, while the person holds the phone. Watch for it instead of making
+    // them close and reopen the app.
+    //
+    // Not under `flutter test`: a real HTTP call there leaves Dio's timer
+    // pending under the fake clock and fails suites that only wanted to look
+    // at this screen. What it does is covered without a widget, by driving
+    // `provisioningProvider` over a fake service (provisioning_apply_test).
+    if (!_isEditing && ref.read(profilesProvider).isEmpty && !underFlutterTest) {
+      _waitForPlaylist();
+    }
+  }
+
+  /// Polls the service while this screen is open. Ten seconds is short enough
+  /// to feel immediate during a phone call and rare enough to be nothing at
+  /// all for the free plan; the timer dies with the screen.
+  void _waitForPlaylist() {
+    _provisionTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _checkForPlaylist();
+    });
+    _checkForPlaylist();
+  }
+
+  Future<void> _checkForPlaylist() async {
+    if (_checking || !mounted) return;
+    _checking = true;
+    try {
+      final applied =
+          await ref.read(provisioningProvider.notifier).checkAndApply();
+      if (applied && mounted) {
+        _provisionTimer?.cancel();
+        context.go('/home');
+      }
+    } finally {
+      _checking = false;
+    }
   }
 
   @override
   void dispose() {
+    _provisionTimer?.cancel();
     _nameController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -258,8 +304,68 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
                 ),
               ),
             ),
+            // Only on the very first playlist: this is where someone who can't
+            // fill the form in gets unstuck. Not shown when editing or adding
+            // a second playlist — there the person clearly manages by
+            // themselves, and it would just be noise.
+            if (!_isEditing && ref.watch(profilesProvider).isEmpty)
+              _AskForHelp(code: ref.watch(deviceCodeProvider)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Can't do this yourself? Read this code to whoever gave you the app."
+///
+/// Plain text on purpose: nothing here is interactive, so a D-pad never stops
+/// on it (a focus stop that does nothing is exactly the defect this project
+/// keeps fixing). The playlist arrives on its own — the screen is polling.
+class _AskForHelp extends StatelessWidget {
+  const _AskForHelp({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 24),
+          const Text(
+            'Non riesci a compilarla da solo?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Chiedi a chi ti ha dato questa applicazione e leggigli questo '
+            'codice: la playlist arriva da sola, senza toccare niente.',
+            style: TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Text(
+              DeviceCode.grouped(code),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 26,
+                letterSpacing: 3,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

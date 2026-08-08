@@ -263,6 +263,10 @@ export default `<!doctype html>
       <label for="host">Indirizzo del pannello</label>
       <input type="text" id="host" placeholder="http://esempio.tv:8080" autocomplete="off">
     </div>
+    <div class="field">
+      <label for="plname">Nome della playlist sul dispositivo</label>
+      <input type="text" id="plname" placeholder="Playlist" autocomplete="off">
+    </div>
     <div class="row2" style="margin-top:12px">
       <div class="field" style="margin:0">
         <label for="user">Utente</label>
@@ -273,6 +277,14 @@ export default `<!doctype html>
         <input type="text" id="pass" autocomplete="off">
       </div>
     </div>
+    <div class="field" style="margin-top:12px">
+      <label for="group">Sincronizza con (codice di un altro suo dispositivo) — opzionale</label>
+      <input type="text" id="group" placeholder="ABCD-EFGH-JKLM" autocomplete="off"
+             autocapitalize="characters" spellcheck="false">
+    </div>
+    <p class="hint" style="margin:8px 0 0">Con lo stesso codice su due dispositivi, preferiti e
+      Continua a guardare si allineano. La sincronizzazione segue quel codice: accendila sulla
+      sua riga qui sotto.</p>
     <div class="actions">
       <button id="send" disabled>Invia al dispositivo</button>
     </div>
@@ -472,7 +484,14 @@ export default `<!doctype html>
     var user = $('user').value.trim();
     var pass = $('pass').value;
     if (!host || !user) { toast('Servono indirizzo e utente.'); return; }
-    var payload = JSON.stringify({ host: host, username: user, password: pass, at: Date.now() });
+    var group = $('group').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (group && group.length !== 12) { toast('Il codice del gruppo ha 12 caratteri.'); return; }
+    var payload = JSON.stringify({
+      host: host, username: user, password: pass,
+      name: $('plname').value.trim() || 'Playlist',
+      syncCode: group || undefined,
+      at: Date.now()
+    });
     var code = currentCode();
     encrypt(code, payload)
       .then(function (data) { return api('profile', { method: 'POST', body: { code: code, data: data } }); })

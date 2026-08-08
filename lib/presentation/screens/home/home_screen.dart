@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../state/catalog_refresh.dart';
 import '../../../state/live_providers.dart'
     show expiryDateProvider, liveCategoriesProvider;
+import '../../../state/provisioning_providers.dart';
 import '../../../state/series_providers.dart' show seriesCategoriesProvider;
 import '../../../state/vod_providers.dart' show vodCategoriesProvider;
 import '../../../state/update_providers.dart';
@@ -33,6 +34,13 @@ class HomeScreen extends ConsumerWidget {
     ref.read(liveCategoriesProvider.future).ignore();
     ref.read(vodCategoriesProvider.future).ignore();
     ref.read(seriesCategoriesProvider.future).ignore();
+    // Pick up a playlist the owner corrected from the panel: one GET, and it
+    // only rewrites the profile when what's waiting is newer than what this
+    // device applied. This is what makes "the panel changed host, fix it for
+    // everyone from one place" true instead of a promise.
+    if (!underFlutterTest) {
+      ref.read(provisioningProvider.notifier).checkAndApply().ignore();
+    }
     final isFullscreen = ref.watch(fullscreenProvider);
 
     // The home is the root route: a system Back here would kill the app cold.

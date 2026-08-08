@@ -51,6 +51,7 @@ dependencies:
   window_manager: ^0.5.2
   package_info_plus: ^8.1.2
   open_filex: ^4.5.0
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:
