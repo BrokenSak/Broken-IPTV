@@ -182,6 +182,10 @@ class SyncNotifier extends Notifier<SyncState> {
       StorageService.prefsBox.put(_lastAtKey, now.millisecondsSinceEpoch);
       StorageService.prefsBox.put(_fingerprintKey, mergedFp);
       state = state.copyWith(running: false, lastSyncAt: now, clearError: true);
+    } on SyncNotAllowedException catch (e) {
+      // The code isn't enabled: say so, instead of sending the user to check
+      // an address and a code that are both fine.
+      state = state.copyWith(running: false, error: e.message);
     } catch (_) {
       state = state.copyWith(
         running: false,

@@ -59,14 +59,62 @@ Serve un account Cloudflare (gratuito) e Node.js installato.
    "Indirizzo del servizio", premi **Genera codice**, poi **Salva e sincronizza**.
    Sugli altri dispositivi metti lo **stesso indirizzo e lo stesso codice**.
 
+## Il pannello (`/admin`)
+
+Da qui il proprietario **abilita i dispositivi** e **configura le playlist**.
+Serve un token, che è un *secret* del Worker e non sta nel repo:
+
+```bash
+npx wrangler secret put ADMIN_TOKEN
+```
+
+Poi si apre `https://<il-tuo-worker>.workers.dev/admin` e lo si incolla. Per
+provare in locale, `sync_worker/.dev.vars` (gitignorato) con
+`ADMIN_TOKEN = "..."`, e `npx wrangler dev`.
+
+Nel pannello si scrive il **codice che il dispositivo mostra** — te lo legge la
+persona a cui stai sistemando l'app — gli si dà un nome, si accende o spegne la
+sincronizzazione e gli si può inviare la playlist. La playlist viene **cifrata
+nel browser con il codice stesso** (AES-GCM, chiave = SHA-256 del codice): sul
+database finiscono byte illeggibili, e solo quel dispositivo può aprirli.
+Per la stessa ragione la playlist si può inviare **solo avendo il codice**:
+dall'elenco, che contiene solo hash, non si può.
+
+## Allowlist (perché esiste)
+
+L'indirizzo del servizio è dentro l'app, e l'app è pubblica: senza un filtro
+chiunque potrebbe scrivere qui e bruciare il piano gratuito. Quindi **ogni**
+percorso del dispositivo è chiuso a chiave:
+
+- codice non presente nella tabella `codes` → `403 unknown_code`;
+- codice presente ma con la sincronizzazione spenta → `403 sync_disabled`
+  (la playlist invece si legge lo stesso: quella non costa scritture).
+
+L'app distingue i due casi e mostra la frase giusta, invece di "controlla
+codice e indirizzo".
+
+Applicando `schema.sql` su un database già in uso, i codici che **avevano già
+dati** vengono abilitati automaticamente: chi sincronizzava prima continua.
+
 ## API
 
-| Metodo | Percorso           | Risposta                                  |
-| ------ | ------------------ | ----------------------------------------- |
-| GET    | `/v1/blob/<code>`  | il blob JSON, oppure `404` se non c'è nulla |
-| PUT    | `/v1/blob/<code>`  | `{"ok":true}` (sostituisce il blob)        |
-| DELETE | `/v1/blob/<code>`  | `{"ok":true}` (dimentica quel codice)      |
-| GET    | `/health`          | `{"ok":true}`                              |
+| Metodo | Percorso              | Risposta                                     |
+| ------ | --------------------- | -------------------------------------------- |
+| GET    | `/v1/blob/<code>`     | il blob JSON, oppure `404` se non c'è nulla   |
+| PUT    | `/v1/blob/<code>`     | `{"ok":true}` (sostituisce il blob)           |
+| DELETE | `/v1/blob/<code>`     | `{"ok":true}` (dimentica quel codice)         |
+| GET    | `/v1/profile/<code>`  | `{"data":"<cifrato>","updatedAt":…}` o `404`  |
+| GET    | `/admin`              | il pannello (HTML)                            |
+| GET    | `/health`             | `{"ok":true}`                                 |
+
+Dietro al token (`Authorization: Bearer <ADMIN_TOKEN>`):
+
+| Metodo | Percorso            | Cosa fa                                        |
+| ------ | ------------------- | ---------------------------------------------- |
+| GET    | `/v1/admin/codes`   | elenco dispositivi (hash, nome, stato)          |
+| POST   | `/v1/admin/codes`   | aggiunge o aggiorna `{code, note, syncEnabled}` |
+| POST   | `/v1/admin/profile` | salva `{code, data}` (playlist già cifrata)     |
+| POST   | `/v1/admin/forget`  | cancella codice, blob e playlist                |
 
 Il codice è di 12 caratteri `A-Z0-9`; i trattini con cui l'app lo mostra
 (`ABCD-EFGH-JKLM`) vengono ignorati. Blob oltre 1 MB → `413`.
