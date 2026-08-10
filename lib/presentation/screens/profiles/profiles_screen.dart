@@ -10,6 +10,7 @@ import '../../../state/profile_providers.dart';
 import '../../../state/provisioning_providers.dart';
 import '../../common/app_dialogs.dart';
 import '../../common/ask_for_help.dart';
+import '../../common/update_banner.dart';
 import '../../common/app_logo.dart';
 import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
@@ -81,7 +82,14 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
           ],
         ),
       ),
-      body: profiles.isEmpty
+      body: Column(
+        children: [
+          // ⚠️ Also here, not just on the home: a device without a playlist
+          // never reaches the home, so the person who most needs a fix could
+          // never be offered one ("non mi dice aggiorna").
+          const UpdateBanner(),
+          Expanded(
+            child: profiles.isEmpty
           ? _EmptyState(
               onAdd: () => context.push('/profiles/add'),
               code: ref.watch(deviceCodeProvider),
@@ -101,6 +109,9 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
                 );
               },
             ),
+          ),
+        ],
+      ),
       // One D-pad stop with a visible ring: a bare FAB has invisible focus with
       // this theme, so on TV this was the unreachable-looking way to add a
       // SECOND playlist. Black ring — the FAB is white.

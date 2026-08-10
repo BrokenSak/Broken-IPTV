@@ -1,7 +1,7 @@
 {
-  "build": 38,
-  "version": "1.9.1",
-  "notes": "Il codice del dispositivo ora si vede subito nella prima schermata, invece che in fondo al modulo dove col telecomando non ci si arrivava. Su quella schermata l'app aspetta anche la playlist: quando chi ti configura l'app la invia, entra da sola.",
+  "build": 39,
+  "version": "1.9.2",
+  "notes": "L'avviso di aggiornamento ora compare anche nella schermata delle playlist: prima stava solo nella Home, che senza una playlist non si raggiunge — quindi chi era bloccato non poteva aggiornarsi.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
