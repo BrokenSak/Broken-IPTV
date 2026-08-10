@@ -1,7 +1,7 @@
 {
-  "build": 40,
-  "version": "1.10.0",
-  "notes": "La playlist configurata a distanza ora fa capo a un'utenza: se chi ti ha dato l'app corregge l'indirizzo o la password, la modifica arriva da sola su tutti i dispositivi collegati, senza doverti richiedere il codice.",
+  "build": 41,
+  "version": "1.10.1",
+  "notes": "Sui televisori (Fire TV e Android TV) l'app ha finalmente una tessera rettangolare disegnata come si deve, con il nome leggibile da lontano, al posto dell'icona quadrata schiacciata dentro il riquadro.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

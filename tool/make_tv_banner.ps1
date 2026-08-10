@@ -1,93 +1,80 @@
-# Builds the Fire TV / Android TV launcher banner (rectangular) from the
-# existing square app icon, so the TV artwork stays consistent with the phone
-# icon: play logo on the left, app name on the right, on the icon's own black.
+# Rigenera il banner rettangolare dei launcher TV (Fire OS & co.) partendo da
+# tool/tv_banner.html.
+#
+#   powershell -ExecutionPolicy Bypass -File tool\make_tv_banner.ps1
+#
+# Perché non è più disegnato con System.Drawing (com'era fino al 71° giro): il
+# banner è tipografia, e comporlo con DrawString voleva dire misure a occhio,
+# nessun controllo su interlinea e crenatura, e un risultato che era "icona
+# quadrata + due parole di fianco". Ora la composizione sta in una pagina HTML —
+# dove allineare il blocco del nome all'altezza del marchio è una riga di CSS —
+# e questo script la rasterizza e basta.
+#
+# ⚠️ Si rasterizza UNA volta sola a 640x360 e si scala giù. Edge headless ha una
+# larghezza minima di finestra: sotto i ~400px **ritaglia invece di
+# rimpicciolire**, e ti ritrovi con un banner tagliato che sembra a posto finché
+# non lo apri (a 320 il render diretto è sbagliato). Il ricampionamento bicubico
+# da 640 è comunque migliore del render nativo a quella misura.
+#
+# ⚠️ Dopo l'installazione il Firestick mostra ancora la tessera vecchia: è in
+# cache nel LAUNCHER, non nell'app. Serve disinstalla -> riavvio dello stick ->
+# installa, e conviene cambiare anche la versione (alcuni launcher indicizzano
+# l'artwork per pacchetto+versione).
+#
+# La variante si sceglie nella pagina (`var variant = ... || 'lockup'`): via
+# file:// non si può contare sulla query string.
+
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-$root = "C:\Users\aless\Documents\Claude\broken_iptv"
-$src = [System.Drawing.Bitmap]::FromFile("$root\assets\icon\app_icon.png")
+$root = Split-Path -Parent $PSScriptRoot
+$page = Join-Path $PSScriptRoot 'tv_banner.html'
+$res = Join-Path $root 'android\app\src\main\res'
+$work = Join-Path $env:TEMP ('tv_banner_' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$big = Join-Path $work 'tv_banner_640.png'
+New-Item -ItemType Directory -Path $work | Out-Null
 
-# --- Find the white play square inside the icon, so we can crop just that
-# (drawing the whole icon would leave the logo tiny inside its own padding).
-$rect = New-Object System.Drawing.Rectangle 0, 0, $src.Width, $src.Height
-$data = $src.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-$bytes = New-Object byte[] ($data.Stride * $src.Height)
-[System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
-$src.UnlockBits($data)
+$edge = @(
+  (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+  (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $edge) { throw "msedge.exe non trovato: serve per rasterizzare $page" }
 
-$minX = $src.Width; $minY = $src.Height; $maxX = 0; $maxY = 0
-for ($y = 0; $y -lt $src.Height; $y += 2) {
-  $row = $y * $data.Stride
-  for ($x = 0; $x -lt $src.Width; $x += 2) {
-    $i = $row + $x * 4
-    # Format32bppArgb byte order is B,G,R,A
-    if ($bytes[$i] -gt 200 -and $bytes[$i + 1] -gt 200 -and $bytes[$i + 2] -gt 200 -and $bytes[$i + 3] -gt 128) {
-      if ($x -lt $minX) { $minX = $x }
-      if ($x -gt $maxX) { $maxX = $x }
-      if ($y -lt $minY) { $minY = $y }
-      if ($y -gt $maxY) { $maxY = $y }
+try {
+  # NB: si passa da Start-Process e NON da `& $edge ... 2>&1`. In PowerShell 5.1
+  # redirigere lo stderr di un eseguibile nativo incapsula ogni riga in un
+  # ErrorRecord (NativeCommandError): con $ErrorActionPreference='Stop' lo
+  # script muore anche quando Edge ha funzionato benissimo — e Edge scrive
+  # proprio su stderr il suo "bytes written to file".
+  Start-Process -FilePath $edge -NoNewWindow -Wait -ArgumentList @(
+    '--headless=new', '--disable-gpu', '--hide-scrollbars',
+    '--window-size=640,360', "--screenshot=$big", "--user-data-dir=$work\profile",
+    ('file:///' + $page.Replace('\', '/'))
+  ) -RedirectStandardError (Join-Path $work 'edge.log')
+  if (-not (Test-Path $big)) { throw "Edge non ha prodotto $big" }
+
+  $src = [System.Drawing.Image]::FromFile($big)
+  try {
+    foreach ($t in @(@(640, 360, 'xxxhdpi'), @(480, 270, 'xxhdpi'), @(320, 180, 'xhdpi'))) {
+      $dir = Join-Path $res ('drawable-' + $t[2])
+      if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+      $bmp = New-Object System.Drawing.Bitmap($t[0], $t[1])
+      $g = [System.Drawing.Graphics]::FromImage($bmp)
+      $g.InterpolationMode = 'HighQualityBicubic'
+      $g.PixelOffsetMode = 'HighQuality'
+      $g.SmoothingMode = 'HighQuality'
+      $g.DrawImage($src, 0, 0, $t[0], $t[1])
+      $g.Dispose()
+      $bmp.Save((Join-Path $dir 'tv_banner.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+      $bmp.Dispose()
+      Write-Host ('scritto drawable-{0}/tv_banner.png  {1}x{2}' -f $t[2], $t[0], $t[1])
     }
   }
+  finally { $src.Dispose() }
 }
-$logoW = $maxX - $minX + 1
-$logoH = $maxY - $minY + 1
-Write-Output "logo bbox: x=$minX y=$minY w=$logoW h=$logoH"
+finally { Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue }
 
-# Background = the icon's own black, sampled from inside its rounded square,
-# so the cropped logo sits on the banner with no visible seam.
-$bg = $src.GetPixel(60, 60)
-Write-Output ("bg: R={0} G={1} B={2} A={3}" -f $bg.R, $bg.G, $bg.B, $bg.A)
-if ($bg.A -lt 250) { $bg = [System.Drawing.Color]::FromArgb(255, 10, 10, 10) }
-
-function New-Banner {
-  param([int]$W, [int]$H, [string]$OutPath)
-
-  $scale = $W / 320.0
-  $bmp = New-Object System.Drawing.Bitmap $W, $H
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-  $g.Clear($bg)
-
-  # App name, two lines so it stays big and readable across a TV room.
-  $fontSize = 30 * $scale
-  $font = New-Object System.Drawing.Font "Segoe UI", $fontSize, ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
-  $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-
-  $l1 = "Broken"
-  $l2 = "IPTV"
-  $s1 = $g.MeasureString($l1, $font)
-  $s2 = $g.MeasureString($l2, $font)
-  $textW = [Math]::Max($s1.Width, $s2.Width)
-
-  # Centre logo + text as one group, so the banner isn't left-heavy.
-  $logoSize = [int](116 * $scale)
-  $gap = [int](18 * $scale)
-  $groupW = $logoSize + $gap + $textW
-  $startX = ($W - $groupW) / 2
-
-  $logoY = [int](($H - $logoSize) / 2)
-  $destRect = New-Object System.Drawing.Rectangle ([int]$startX), $logoY, $logoSize, $logoSize
-  $srcRect = New-Object System.Drawing.Rectangle $minX, $minY, $logoW, $logoH
-  $g.DrawImage($src, $destRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
-
-  $textX = $startX + $logoSize + $gap
-  $lineH = [Math]::Max($s1.Height, $s2.Height)
-  $textY = ($H - $lineH * 2) / 2
-
-  $g.DrawString($l1, $font, $brush, $textX, $textY)
-  $g.DrawString($l2, $font, $brush, $textX, $textY + $lineH)
-  Write-Output ("{0}x{1}: group={2} left={3} right={4}" -f $W, $H, $groupW, $startX, ($startX + $groupW))
-
-  $dir = Split-Path $OutPath -Parent
-  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
-  $bmp.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
-  $g.Dispose(); $bmp.Dispose(); $font.Dispose(); $brush.Dispose()
-  Write-Output "wrote $OutPath"
-}
-
-# 320x180 @xhdpi is the documented Fire TV / Android TV banner size; the
-# xxhdpi copy keeps it crisp on 4K sticks.
-New-Banner -W 320 -H 180 -OutPath "$root\android\app\src\main\res\drawable-xhdpi\tv_banner.png"
-New-Banner -W 480 -H 270 -OutPath "$root\android\app\src\main\res\drawable-xxhdpi\tv_banner.png"
-$src.Dispose()
+Write-Host ''
+Write-Host "Verifica dentro l'APK compilata:"
+Write-Host '  aapt2 dump badging app-release.apk | grep leanback'
+Write-Host "deve mostrare  leanback-launchable-activity: ... banner='res/....png'"

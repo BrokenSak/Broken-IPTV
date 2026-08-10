@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Broken IPTV — banner TV</title>
+<!--
+  Sorgente del banner rettangolare dei launcher TV (Fire OS & co.), che NON
+  usano l'icona quadrata. Si rasterizza con Edge headless a densità nativa,
+  così il testo è nitido a ogni misura invece di essere un ingrandimento:
+
+    tool/make_tv_banner.ps1
+
+  Tutto è in `em` legati a --u (= 1/180 dell'altezza), quindi la stessa pagina
+  vale per 320x180, 480x270 e 640x360 senza toccare un numero.
+
+  Variante scelta con ?v=lockup (marchio + nome) o ?v=word (solo nome).
+-->
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  body { width: 100vw; height: 100vh; overflow: hidden; }
+
+  .banner {
+    /* --u: l'unità di misura è l'altezza della tessera, non i pixel. */
+    --u: calc(100vh / 180);
+    width: 100vw; height: 100vh;
+    display: grid; place-items: center;
+    /* Nero pieno come l'app, ma con un corpo: sulla home di Fire OS una
+       tessera di nero assoluto sparisce dentro lo sfondo del launcher. */
+    background: linear-gradient(158deg, #1c1c20 0%, #050506 62%);
+    font-family: "Segoe UI Variable Display", "Segoe UI Semibold", "Segoe UI",
+                 system-ui, -apple-system, sans-serif;
+    color: #fff;
+  }
+
+  .lockup { display: flex; align-items: center; gap: calc(20 * var(--u)); }
+
+  /* Il marchio dell'app: play nero su quadrato bianco stondato. */
+  .mark {
+    width: calc(78 * var(--u)); height: calc(78 * var(--u));
+    border-radius: calc(23 * var(--u));
+    background: #fff;
+    display: grid; place-items: center;
+    flex: none;
+  }
+  .mark svg { width: calc(34 * var(--u)); height: calc(34 * var(--u)); fill: #000;
+              /* compensazione ottica: un triangolo centrato geometricamente
+                 sembra spostato a sinistra */
+              margin-left: calc(4 * var(--u)); }
+
+  /* Nome su due righe, interlinea stretta: il blocco di testo deve essere
+     alto quanto il marchio, altrimenti la coppia non è una coppia. */
+  .word {
+    font-size: calc(43 * var(--u));
+    font-weight: 700;
+    line-height: 0.88;
+    letter-spacing: -0.025em;
+  }
+  .word span { display: block; }
+
+  /* Variante "solo nome": il marchio diventa punteggiatura, non protagonista. */
+  .stack { text-align: center; }
+  .stack .mark {
+    width: calc(46 * var(--u)); height: calc(46 * var(--u));
+    border-radius: calc(13 * var(--u));
+    margin: 0 auto calc(15 * var(--u));
+  }
+  .stack .mark svg { width: calc(20 * var(--u)); height: calc(20 * var(--u));
+                     margin-left: calc(2 * var(--u)); }
+  .stack .word {
+    font-size: calc(37 * var(--u));
+    letter-spacing: 0.02em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .stack .word .thin { font-weight: 300; letter-spacing: 0.06em; }
+
+  /* Terza variante: la pila di "word", ma con un peso che regge la sfumatura
+     che il launcher applica sopra la tessera quando prende il focus. */
+  .stack.solid .word .thin { font-weight: 600; letter-spacing: 0.14em; opacity: .82; }
+  .stack.solid .word { font-size: calc(39 * var(--u)); }
+</style>
+</head>
+<body>
+<div class="banner" id="banner"></div>
+<script>
+  var play = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  var variant = (location.search.match(/v=(\w+)/) || [])[1] || 'lockup';
+  var el = document.getElementById('banner');
+  if (variant === 'word' || variant === 'solid') {
+    el.innerHTML =
+      '<div class="stack' + (variant === 'solid' ? ' solid' : '') + '">' +
+        '<div class="mark">' + play + '</div>' +
+        '<div class="word"><span>Broken</span><span class="thin">IPTV</span></div>' +
+      '</div>';
+  } else {
+    el.innerHTML =
+      '<div class="lockup">' +
+        '<div class="mark">' + play + '</div>' +
+        '<div class="word"><span>Broken</span><span>IPTV</span></div>' +
+      '</div>';
+  }
+</script>
+</body>
+</html>
