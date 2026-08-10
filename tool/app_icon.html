@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Broken IPTV — icona</title>
+<!--
+  Sorgente dell'icona dell'app. Si rasterizza con tool/make_app_icon.ps1, che
+  produce i due PNG da 1024 che `flutter_launcher_icons` si aspetta:
+
+    ?v=full  -> assets/icon/app_icon.png     (icona intera: legacy + Windows)
+    ?v=fg    -> assets/icon/app_icon_fg.png  (solo il play, per l'adaptive icon)
+
+  Il grigio NON è una scelta estetica libera: è #5A5A5A perché è **esattamente**
+  il grigio con cui il launcher di Fire TV riempie i lati della tessella 16:9
+  attorno all'icona quadrata (misurato sullo schermo del Firestick, 71° giro).
+  Con lo stesso grigio la tessera si legge come una card sola invece che a tre
+  bande — è l'unica leva rimasta, visto che quel launcher ignora il banner.
+
+  Il play è disegnato **grande**: a 100px sulla riga della home un triangolo che
+  occupa metà icona si vede, un pulsantino no.
+-->
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { width: 100vw; height: 100vh; overflow: hidden; }
+  .canvas { --u: calc(100vw / 1024); width: 100vw; height: 100vw; position: relative; }
+
+  /* Icona intera: la card grigia con gli angoli stondati come oggi. */
+  .card {
+    position: absolute; inset: 0;
+    background: #5A5A5A;
+    border-radius: calc(228 * var(--u));
+  }
+
+  /* Il play. `left` compensa otticamente: un triangolo centrato per geometria
+     sembra spostato a sinistra, perché il suo peso sta verso la base. */
+  .play {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-40%, -50%);
+    width: calc(var(--w) * var(--u));
+    height: calc(var(--h) * var(--u));
+  }
+  .play svg { width: 100%; height: 100%; fill: #fff; display: block; }
+
+  /* Icona intera: play a ~52% del lato. */
+  .full .play { --w: 470; --h: 540; }
+
+  /* Adaptive foreground: la maschera del sistema mostra solo i 72dp centrali
+     dei 108 della tela, quindi qui il play va disegnato più piccolo per
+     risultare della STESSA dimensione ottica dell'icona intera. */
+  .fg .play { --w: 350; --h: 400; }
+</style>
+</head>
+<body>
+<div class="canvas" id="canvas"></div>
+<script>
+  var variant = (location.search.match(/v=(\w+)/) || [])[1] || 'full';
+  var canvas = document.getElementById('canvas');
+  canvas.className = 'canvas ' + variant;
+  var html = '';
+  if (variant === 'full') html += '<div class="card"></div>';
+  html += '<div class="play"><svg viewBox="0 0 100 115" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="M4 3 L96 57.5 L4 112 Z"/></svg></div>';
+  canvas.innerHTML = html;
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
-  "build": 41,
-  "version": "1.10.1",
-  "notes": "Sui televisori (Fire TV e Android TV) l'app ha finalmente una tessera rettangolare disegnata come si deve, con il nome leggibile da lontano, al posto dell'icona quadrata schiacciata dentro il riquadro.",
+  "build": 42,
+  "version": "1.10.2",
+  "notes": "Icona rifatta: sui televisori il launcher incorniciava l'icona quadrata lasciando due barre grigie ai lati. Ora il fondo dell'icona è esattamente quel grigio e il play è grande, così la tessera si legge come un riquadro solo.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
