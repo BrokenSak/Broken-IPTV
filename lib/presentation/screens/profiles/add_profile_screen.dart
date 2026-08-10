@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui_mode.dart';
 import '../../../data/models/xtream_profile.dart';
-import '../../../data/services/provisioning_service.dart';
 import '../../../data/services/xtream_api_service.dart';
 import '../../../state/profile_providers.dart';
 import '../../../state/provisioning_providers.dart';
@@ -304,68 +303,8 @@ class _AddProfileScreenState extends ConsumerState<AddProfileScreen> {
                 ),
               ),
             ),
-            // Only on the very first playlist: this is where someone who can't
-            // fill the form in gets unstuck. Not shown when editing or adding
-            // a second playlist — there the person clearly manages by
-            // themselves, and it would just be noise.
-            if (!_isEditing && ref.watch(profilesProvider).isEmpty)
-              _AskForHelp(code: ref.watch(deviceCodeProvider)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// "Can't do this yourself? Read this code to whoever gave you the app."
-///
-/// Plain text on purpose: nothing here is interactive, so a D-pad never stops
-/// on it (a focus stop that does nothing is exactly the defect this project
-/// keeps fixing). The playlist arrives on its own — the screen is polling.
-class _AskForHelp extends StatelessWidget {
-  const _AskForHelp({required this.code});
-
-  final String code;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Divider(color: Colors.white24, height: 1),
-          const SizedBox(height: 24),
-          const Text(
-            'Non riesci a compilarla da solo?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Chiedi a chi ti ha dato questa applicazione e leggigli questo '
-            'codice: la playlist arriva da sola, senza toccare niente.',
-            style: TextStyle(color: Colors.white70, height: 1.4),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white24),
-            ),
-            child: Text(
-              DeviceCode.grouped(code),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 26,
-                letterSpacing: 3,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

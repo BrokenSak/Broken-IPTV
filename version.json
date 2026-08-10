@@ -1,7 +1,7 @@
 {
-  "build": 37,
-  "version": "1.9.0",
-  "notes": "Se non riesci a compilare la playlist da solo, sotto al modulo trovi ora un codice: leggilo a chi ti ha dato l'app e la playlist arriva da sola, senza toccare niente. La sincronizzazione va abilitata sul codice del dispositivo.",
+  "build": 38,
+  "version": "1.9.1",
+  "notes": "Il codice del dispositivo ora si vede subito nella prima schermata, invece che in fondo al modulo dove col telecomando non ci si arrivava. Su quella schermata l'app aspetta anche la playlist: quando chi ti configura l'app la invia, entra da sola.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

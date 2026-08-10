@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,16 +7,63 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/xtream_profile.dart';
 import '../../../state/profile_providers.dart';
+import '../../../state/provisioning_providers.dart';
 import '../../common/app_dialogs.dart';
+import '../../common/ask_for_help.dart';
 import '../../common/app_logo.dart';
 import '../../common/icon_action.dart';
 import '../../common/tv_focusable.dart';
 
-class ProfilesScreen extends ConsumerWidget {
+class ProfilesScreen extends ConsumerStatefulWidget {
   const ProfilesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfilesScreen> createState() => _ProfilesScreenState();
+}
+
+class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
+  Timer? _provisionTimer;
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // ⚠️ This — not the add-playlist form — is the first screen after the
+    // device picker, so it is where someone who can't set the app up alone
+    // actually stops. Shipping the code and the wait only on the form meant
+    // the person never got that far: reported the day 1.9.0 went out ("non
+    // gli dà il codice dispositivo sotto"). Both live here now.
+    if (ref.read(profilesProvider).isEmpty && !underFlutterTest) {
+      _provisionTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _checkForPlaylist(),
+      );
+      _checkForPlaylist();
+    }
+  }
+
+  Future<void> _checkForPlaylist() async {
+    if (_checking || !mounted) return;
+    _checking = true;
+    try {
+      final applied = await ref.read(provisioningProvider.notifier).checkAndApply();
+      if (applied && mounted) {
+        _provisionTimer?.cancel();
+        context.go('/home');
+      }
+    } finally {
+      _checking = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _provisionTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final profiles = ref.watch(profilesProvider);
 
     return Scaffold(
@@ -33,7 +82,10 @@ class ProfilesScreen extends ConsumerWidget {
         ),
       ),
       body: profiles.isEmpty
-          ? _EmptyState(onAdd: () => context.push('/profiles/add'))
+          ? _EmptyState(
+              onAdd: () => context.push('/profiles/add'),
+              code: ref.watch(deviceCodeProvider),
+            )
           : ListView.separated(
               padding: const EdgeInsets.all(20),
               itemCount: profiles.length,
@@ -82,18 +134,23 @@ class ProfilesScreen extends ConsumerWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onAdd});
+  const _EmptyState({required this.onAdd, required this.code});
 
   final VoidCallback onAdd;
+  final String code;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.live_tv_outlined, size: 56, color: AppColors.textSecondary),
-          const SizedBox(height: 16),
+          // No big icon here: this screen must fit WITHOUT scrolling. On a
+          // D-pad the list only scrolls by following the focus, and the help
+          // block below is plain text, so anything that doesn't fit is
+          // unreachable — the defect reported on the add form.
           Text('Nessuna playlist', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
           Text(
@@ -116,7 +173,12 @@ class _EmptyState extends StatelessWidget {
               ),
             ),
           ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: AskForHelpWithCode(code: code),
+          ),
         ],
+      ),
       ),
     );
   }
