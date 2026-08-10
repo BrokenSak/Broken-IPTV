@@ -180,6 +180,19 @@ export default `<!doctype html>
     border: 1px solid var(--edge); color: var(--muted); white-space: nowrap;
   }
   .tag.on { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
+  .acc { margin-bottom: 22px; }
+  .acc-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 10px; }
+  .acc-name { font-size: 14px; font-weight: 600; }
+  .acc-count { font-size: 11.5px; color: var(--muted); }
+  button.small { padding: 6px 12px; font-size: 12px; border-radius: 9px; }
+  .editor {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px 16px; margin: -4px 0 10px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--edge); border-top: 0;
+    border-radius: 0 0 13px 13px;
+  }
+  .editor .actions { margin-top: 4px; }
   .empty-state { color: var(--muted); font-size: 13.5px; padding: 22px 2px; line-height: 1.6; }
 
   .toast {
@@ -235,10 +248,18 @@ export default `<!doctype html>
 
   <div class="card">
     <h2>Dispositivo</h2>
-    <p class="hint">Il nome serve solo a te: nell'elenco i codici non si possono leggere.</p>
-    <div class="field">
-      <label for="note">Nome</label>
-      <input type="text" id="note" placeholder="es. mamma — Firestick">
+    <p class="hint">L'utenza raggruppa i dispositivi di una persona; il nome del dispositivo
+      serve a distinguerli. Nell'elenco i codici non si possono leggere.</p>
+    <div class="row2">
+      <div class="field" style="margin:0">
+        <label for="account">Utenza (la persona)</label>
+        <input type="text" id="account" placeholder="mamma" autocomplete="off" list="accounts">
+        <datalist id="accounts"></datalist>
+      </div>
+      <div class="field" style="margin:0">
+        <label for="note">Dispositivo</label>
+        <input type="text" id="note" placeholder="Firestick salotto">
+      </div>
     </div>
     <div class="actions">
       <label class="switch">
@@ -399,6 +420,7 @@ export default `<!doctype html>
       out.textContent = 'Sul server finisce solo questo: ' + id.slice(0, 12) + '…';
       var known = findByHash(id);
       $('note').value = known ? (known.note || '') : $('note').value;
+      $('account').value = known ? (known.account || '') : $('account').value;
       $('sync').checked = known ? !!known.sync_enabled : $('sync').checked;
       $('forget').classList.toggle('hidden', !known);
     });
@@ -465,7 +487,8 @@ export default `<!doctype html>
   /* ---------- actions ---------- */
   $('save').addEventListener('click', function () {
     api('codes', { method: 'POST', body: {
-      code: currentCode(), note: $('note').value.trim(), syncEnabled: $('sync').checked
+      code: currentCode(), note: $('note').value.trim(),
+      account: $('account').value.trim(), syncEnabled: $('sync').checked
     } }).then(function () {
       toast('Dispositivo salvato');
       return reload();
@@ -515,43 +538,163 @@ export default `<!doctype html>
     return Math.round(s / 86400) + ' giorni fa';
   }
 
+  /* Modifica in riga di un dispositivo GIA' registrato. Passa per l'hash e non
+     per il codice: quello non ce l'ha piu' nessuno, e per rinominare, spostare
+     di utenza o rimuovere non serve — serve solo per cifrare una playlist. */
+  function editorFor(row) {
+    var box = document.createElement("div");
+    box.className = "editor";
+
+    var acc = document.createElement("input");
+    acc.type = "text"; acc.value = row.account || ""; acc.placeholder = "Utenza";
+    acc.setAttribute("list", "accounts");
+
+    var name = document.createElement("input");
+    name.type = "text"; name.value = row.note || ""; name.placeholder = "Dispositivo";
+
+    var save = document.createElement("button");
+    save.textContent = "Salva";
+    save.addEventListener("click", function () {
+      api("device", { method: "POST", body: {
+        id: row.id, note: name.value.trim(), account: acc.value.trim(),
+        syncEnabled: !!row.sync_enabled
+      } }).then(function () { toast("Dispositivo aggiornato"); return reload(); })
+        .catch(function (e) { toast(e.message); });
+    });
+
+    var del = document.createElement("button");
+    del.className = "ghost";
+    del.textContent = "Rimuovi";
+    del.addEventListener("click", function () {
+      if (!confirm("Rimuovere questo dispositivo? Perde playlist e dati sincronizzati.")) return;
+      api("forget-device", { method: "POST", body: { id: row.id } })
+        .then(function () { toast("Dispositivo rimosso"); return reload(); })
+        .catch(function (e) { toast(e.message); });
+    });
+
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    actions.appendChild(save); actions.appendChild(del);
+
+    box.appendChild(acc); box.appendChild(name); box.appendChild(actions);
+    return box;
+  }
+
+  function deviceRow(row) {
+    var el = document.createElement("div");
+    el.className = "dev";
+
+    var who = document.createElement("div");
+    who.className = "who";
+    var name = document.createElement("div");
+    name.className = "name";
+    name.textContent = row.note || "senza nome";
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = row.id.slice(0, 12) + " · " + ago(row.last_seen);
+    who.appendChild(name); who.appendChild(meta);
+
+    var playlist = document.createElement("span");
+    playlist.className = "tag" + (row.has_profile ? " on" : "");
+    playlist.textContent = row.has_profile ? "playlist" : "senza playlist";
+
+    var sync = document.createElement("span");
+    sync.className = "tag" + (row.sync_enabled ? " on" : "");
+    sync.textContent = row.sync_enabled ? "sync" : "sync off";
+
+    var edit = document.createElement("button");
+    edit.className = "ghost small";
+    edit.textContent = "Modifica";
+
+    el.appendChild(who); el.appendChild(playlist); el.appendChild(sync); el.appendChild(edit);
+
+    var wrap = document.createElement("div");
+    wrap.appendChild(el);
+    var open = false;
+    edit.addEventListener("click", function () {
+      open = !open;
+      if (open) { wrap.appendChild(editorFor(row)); edit.textContent = "Chiudi"; }
+      else { wrap.removeChild(wrap.lastChild); edit.textContent = "Modifica"; }
+    });
+    return wrap;
+  }
+
+  function accountBlock(account, rows) {
+    var head = document.createElement("div");
+    head.className = "acc-head";
+
+    var title = document.createElement("div");
+    title.className = "acc-name";
+    title.textContent = account || "Senza utenza";
+
+    var count = document.createElement("span");
+    count.className = "acc-count";
+    count.textContent = rows.length + (rows.length === 1 ? " dispositivo" : " dispositivi");
+
+    /* Un solo interruttore per tutta l'utenza: lo accendi una volta e vale per
+       ogni dispositivo che le hai registrato sotto. */
+    var allOn = rows.every(function (r) { return r.sync_enabled; });
+    var toggle = document.createElement("button");
+    toggle.className = allOn ? "small" : "ghost small";
+    toggle.textContent = allOn ? "Sync acceso" : "Accendi sync";
+    toggle.disabled = !account;
+    toggle.addEventListener("click", function () {
+      api("account-sync", { method: "POST", body: { account: account, syncEnabled: !allOn } })
+        .then(function (r) {
+          toast((allOn ? "Sync spento su " : "Sync acceso su ") + r.changed + " dispositivi");
+          return reload();
+        })
+        .catch(function (e) { toast(e.message); });
+    });
+
+    head.appendChild(title); head.appendChild(count);
+    var sp = document.createElement("div"); sp.style.flex = "1";
+    head.appendChild(sp); head.appendChild(toggle);
+
+    var block = document.createElement("div");
+    block.className = "acc";
+    block.appendChild(head);
+    rows.forEach(function (r) { block.appendChild(deviceRow(r)); });
+    return block;
+  }
+
   function render(rows) {
     codes = rows;
-    $('count').textContent = rows.length ? rows.length + ' registrati' : '';
-    var list = $('list');
-    list.textContent = '';
+    $("count").textContent = rows.length ? rows.length + " registrati" : "";
+
+    var names = [];
+    rows.forEach(function (r) {
+      if (r.account && names.indexOf(r.account) < 0) names.push(r.account);
+    });
+    var dl = $("accounts");
+    dl.textContent = "";
+    names.forEach(function (n) {
+      var o = document.createElement("option"); o.value = n; dl.appendChild(o);
+    });
+
+    var list = $("list");
+    list.textContent = "";
     if (!rows.length) {
-      var empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = 'Nessun dispositivo. Scrivi qui sopra il codice che ti hanno letto e salvalo.';
+      var empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "Nessun dispositivo. Scrivi qui sopra il codice che ti hanno letto e salvalo.";
       list.appendChild(empty);
       return;
     }
-    rows.forEach(function (row) {
-      var el = document.createElement('div');
-      el.className = 'dev';
 
-      var who = document.createElement('div');
-      who.className = 'who';
-      var name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = row.note || 'senza nome';
-      var meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = row.id.slice(0, 12) + ' · ' + ago(row.last_seen);
-      who.appendChild(name); who.appendChild(meta);
-
-      var sync = document.createElement('span');
-      sync.className = 'tag' + (row.sync_enabled ? ' on' : '');
-      sync.textContent = row.sync_enabled ? 'sync' : 'sync off';
-
-      var playlist = document.createElement('span');
-      playlist.className = 'tag' + (row.has_profile ? ' on' : '');
-      playlist.textContent = row.has_profile ? 'playlist' : 'senza playlist';
-
-      el.appendChild(who); el.appendChild(playlist); el.appendChild(sync);
-      list.appendChild(el);
+    var groups = {};
+    var order = [];
+    rows.forEach(function (r) {
+      var key = r.account || "";
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(r);
     });
+    order.sort(function (a, b) {
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b);
+    });
+    order.forEach(function (k) { list.appendChild(accountBlock(k, groups[k])); });
   }
 
   function reload() {

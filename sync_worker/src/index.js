@@ -169,7 +169,7 @@ async function adminRoutes(request, env, url) {
   // here that could reconstruct a code.
   if (route === 'codes' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      `SELECT c.id, c.note, c.sync_enabled, c.created_at, c.last_seen,
+      `SELECT c.id, c.note, c.account, c.sync_enabled, c.created_at, c.last_seen,
               (SELECT 1 FROM blobs    b WHERE b.id = c.id) AS has_blob,
               (SELECT 1 FROM profiles p WHERE p.id = c.id) AS has_profile,
               (SELECT p.updated_at FROM profiles p WHERE p.id = c.id) AS profile_at
@@ -188,12 +188,14 @@ async function adminRoutes(request, env, url) {
     if (!CODE_RE.test(code)) return json({ error: 'bad_code' }, 400);
     const id = await rowId(code);
     const note = (body.note ?? '').toString().slice(0, 120);
+    const account = (body.account ?? '').toString().slice(0, 120);
     const sync = body.syncEnabled ? 1 : 0;
     await env.DB.prepare(
-      `INSERT INTO codes (id, note, sync_enabled, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET note = excluded.note, sync_enabled = excluded.sync_enabled`,
+      `INSERT INTO codes (id, note, account, sync_enabled, created_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET note = excluded.note, account = excluded.account,
+                                     sync_enabled = excluded.sync_enabled`,
     )
-      .bind(id, note, sync, Date.now())
+      .bind(id, note, account, sync, Date.now())
       .run();
     return json({ ok: true, id });
   }
@@ -215,6 +217,56 @@ async function adminRoutes(request, env, url) {
     )
       .bind(id, data, Date.now())
       .run();
+    return json({ ok: true });
+  }
+
+  // Edit a device already in the list. Keyed by its **hash**, not by the code:
+  // the owner no longer has the code in hand (nobody stores it), and none of
+  // these changes need it — only encrypting a playlist does.
+  if (route === 'device' && request.method === 'POST') {
+    const body = await readJson(request);
+    if (!body) return json({ error: 'bad_json' }, 400);
+    const id = (body.id ?? '').toString();
+    if (!/^[0-9a-f]{64}$/.test(id)) return json({ error: 'bad_id' }, 400);
+    if (!(await codeRow(env, id))) return json({ error: 'unknown_code' }, 404);
+    await env.DB.prepare(
+      'UPDATE codes SET note = ?, account = ?, sync_enabled = ? WHERE id = ?',
+    )
+      .bind(
+        (body.note ?? '').toString().slice(0, 120),
+        (body.account ?? '').toString().slice(0, 120),
+        body.syncEnabled ? 1 : 0,
+        id,
+      )
+      .run();
+    return json({ ok: true });
+  }
+
+  // Same, for the whole utenza: one switch that covers every device the owner
+  // registered under that name — "una volta che clicco il pulsante e' attiva
+  // per tutti i dispositivi che ho registrato io".
+  if (route === 'account-sync' && request.method === 'POST') {
+    const body = await readJson(request);
+    if (!body) return json({ error: 'bad_json' }, 400);
+    const account = (body.account ?? '').toString();
+    const result = await env.DB.prepare(
+      'UPDATE codes SET sync_enabled = ? WHERE account = ?',
+    )
+      .bind(body.syncEnabled ? 1 : 0, account)
+      .run();
+    return json({ ok: true, changed: result.meta?.changes ?? 0 });
+  }
+
+  if (route === 'forget-device' && request.method === 'POST') {
+    const body = await readJson(request);
+    if (!body) return json({ error: 'bad_json' }, 400);
+    const id = (body.id ?? '').toString();
+    if (!/^[0-9a-f]{64}$/.test(id)) return json({ error: 'bad_id' }, 400);
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM profiles WHERE id = ?').bind(id),
+      env.DB.prepare('DELETE FROM blobs WHERE id = ?').bind(id),
+      env.DB.prepare('DELETE FROM codes WHERE id = ?').bind(id),
+    ]);
     return json({ ok: true });
   }
 
