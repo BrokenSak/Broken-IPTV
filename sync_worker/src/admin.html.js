@@ -1,13 +1,25 @@
 /**
  * The owner's panel, served at /admin.
  *
- * Design brief: this page is a phone call. Somebody reads you twelve
- * characters and you set their device up while they wait — so the page opens
- * with the code field, sized like the thing you're transcribing, and the list
- * of devices is history underneath it. Greyscale and glass, like the app.
+ * Design brief: the page has two jobs and they are not symmetric, so the layout
+ * says so.
+ *   * "Papà ha cambiato password" — fix an **utenza** once and it lands on
+ *     every device hanging off it. No code needed, doable months later. This is
+ *     the body of the page.
+ *   * "Mia madre mi legge dodici caratteri" — register a device. This needs the
+ *     code read out loud, because the casellina that tells a device which
+ *     utenza it belongs to can only be encrypted with it. So the dial isn't a
+ *     hero block any more: you pull it out **inside** the utenza you are adding
+ *     the device to, which is also why the page never asks "which utenza?".
  *
- * The page is public HTML; nothing behind it loads without the admin token,
- * which the browser keeps in localStorage and sends as a bearer header.
+ * Greyscale and glass, like the app. The page is public HTML; nothing behind it
+ * loads without the admin token, which the browser keeps in localStorage and
+ * sends as a bearer header.
+ *
+ * ⚠️ The token is also the **master key**: every utenza's code is
+ * HMAC-SHA256(ADMIN_TOKEN, utenza id), derived here in the browser and stored
+ * nowhere. That is what lets this page decrypt a playlist to show it back, and
+ * it is why changing the secret orphans every device already configured.
  *
  * ⚠️ This module is a plain template string: do NOT use backticks or ${...}
  * inside the panel's own script — string concatenation only.
@@ -40,17 +52,15 @@ export default `<!doctype html>
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     min-height: 100dvh;
-    /* One soft light behind the code field: the app's glass needs something
-       to catch, and a flat black page has nothing. */
     background:
-      radial-gradient(120% 60% at 50% -10%, rgba(255,255,255,.09), transparent 60%),
+      radial-gradient(120% 55% at 50% -10%, rgba(255,255,255,.08), transparent 60%),
       var(--ink);
   }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px 80px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px 90px; }
 
   header {
     display: flex; align-items: center; gap: 10px;
-    padding: 18px 0; margin-bottom: 34px;
+    padding: 18px 0; margin-bottom: 30px;
     border-bottom: 1px solid var(--edge);
   }
   .mark {
@@ -61,58 +71,81 @@ export default `<!doctype html>
   header h1 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; margin: 0; }
   header .sp { flex: 1; }
 
-  .eyebrow {
-    font-size: 12px; color: var(--muted); letter-spacing: .04em;
-    margin: 0 0 12px;
+  .section-head {
+    display: flex; align-items: center; gap: 12px; margin: 0 2px 14px;
   }
+  .section-head h2 {
+    font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); margin: 0;
+  }
+  .section-head .sp { flex: 1; }
+  .section-head + .section-head { margin-top: 46px; }
+  .section-gap { margin-top: 46px; }
 
-  /* ---- the dial: twelve slots, grouped like the app prints the code ---- */
-  .dial-shell { position: relative; }
-  .dial {
-    display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
-    padding: 14px 12px;
-    background: var(--glass);
-    border: 1px solid var(--edge);
-    border-radius: var(--r);
-    backdrop-filter: blur(20px);
-    transition: border-color .18s ease, background .18s ease;
+  /* ---- buttons ---- */
+  button {
+    font: inherit; font-size: 14px; font-weight: 600;
+    padding: 11px 18px; border-radius: 11px; cursor: pointer;
+    background: #fff; color: #000; border: 1px solid #fff;
+    transition: opacity .15s ease, background .15s ease;
   }
-  .dial-shell:focus-within .dial { border-color: var(--edge-hi); background: var(--glass-hi); }
-  .cell {
-    flex: 1 1 0; min-width: 0;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: clamp(17px, 5.2vw, 28px);
-    line-height: 1.5;
-    color: var(--text);
-    border-radius: 8px;
-    background: rgba(255,255,255,.04);
-  }
-  .cell.empty { color: transparent; }
-  .cell.active { box-shadow: inset 0 0 0 1.5px #fff; }
-  .sep { flex: none; width: 12px; text-align: center; color: var(--muted); }
-  .dial-shell input {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    opacity: 0; border: 0; padding: 0; font-size: 16px; /* 16px: iOS won't zoom */
-    background: transparent; color: transparent;
-  }
-  .hash {
-    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
-    margin: 10px 2px 0; min-height: 16px;
-  }
+  button:hover { opacity: .86; }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--edge); }
+  button.ghost:hover { background: var(--glass); opacity: 1; }
+  button.small { padding: 7px 13px; font-size: 12.5px; border-radius: 9px; }
+  button:disabled { opacity: .35; cursor: default; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-  /* ---- forms ---- */
-  .card {
+  /* ---- utenza card ---- */
+  .acct {
     background: var(--panel);
     border: 1px solid var(--edge);
     border-radius: var(--r);
     padding: 18px;
-    margin-top: 14px;
+    margin-bottom: 14px;
   }
-  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.005em; }
-  .card p.hint { font-size: 12.5px; color: var(--muted); margin: 0 0 16px; line-height: 1.5; }
+  .acct-top { display: flex; align-items: flex-start; gap: 14px; }
+  .acct-id { flex: 1; min-width: 0; }
+  .acct-name { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .acct-creds {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    margin-top: 5px; overflow-wrap: anywhere;
+  }
+  .acct-creds.none { font-family: var(--sans); font-style: italic; }
+
+  .tag {
+    font-size: 11px; padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--edge); color: var(--muted); white-space: nowrap;
+  }
+  .tag.on { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
+
+  /* ---- devices inside a card ---- */
+  .devs { margin-top: 16px; border-top: 1px solid var(--edge); padding-top: 6px; }
+  .dev {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 2px;
+  }
+  .dev + .dev { border-top: 1px solid rgba(255,255,255,.06); }
+  .dev .who { flex: 1; min-width: 0; }
+  .dev .name { font-size: 14px; }
+  .dev .meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+  /* The name is a field, but a row of fields reads as a form and this is a
+     list. So it looks like text until you go near it. */
+  .dev input[type=text] {
+    max-width: 280px; padding: 6px 9px; margin-left: -9px;
+    background: transparent; border-color: transparent;
+  }
+  .dev input[type=text]:hover { border-color: var(--edge); }
+  .dev input[type=text]:focus { background: rgba(255,255,255,.06); }
+  .dev-none { font-size: 13px; color: var(--muted); padding: 12px 2px; }
+
+  /* ---- forms ---- */
+  .editor {
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--edge);
+    display: flex; flex-direction: column; gap: 13px;
+  }
   label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
-  .field + .field { margin-top: 12px; }
   input[type=text], input[type=password] {
     width: 100%; padding: 11px 13px;
     background: rgba(255,255,255,.04);
@@ -123,23 +156,16 @@ export default `<!doctype html>
   input[type=text]:focus, input[type=password]:focus {
     outline: none; border-color: var(--edge-hi); background: rgba(255,255,255,.07);
   }
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 520px) { .row2 { grid-template-columns: 1fr; gap: 12px; } }
-
-  button {
-    font: inherit; font-size: 14px; font-weight: 600;
-    padding: 11px 18px; border-radius: 11px; cursor: pointer;
-    background: #fff; color: #000; border: 1px solid #fff;
-    transition: opacity .15s ease;
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  @media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
+  .pw { display: flex; gap: 8px; align-items: center; }
+  .pw input { flex: 1; }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0;
   }
-  button:hover { opacity: .86; }
-  button.ghost { background: transparent; color: var(--text); border-color: var(--edge); }
-  button.ghost:hover { background: var(--glass); opacity: 1; }
-  button:disabled { opacity: .35; cursor: default; }
-  .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
 
-  /* State is shape, not colour: filled = on, hairline = off (same language as
-     the selected playlist in the app). */
+  /* State is shape, not colour: filled = on, hairline = off (the same language
+     as the selected playlist in the app). */
   .switch { display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
   .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
   .track {
@@ -158,48 +184,46 @@ export default `<!doctype html>
   .switch .lbl { font-size: 13.5px; }
   .switch .lbl small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 
-  /* ---- device list ---- */
-  .list-head {
-    display: flex; align-items: baseline; gap: 10px;
-    margin: 40px 0 12px; padding-top: 26px; border-top: 1px solid var(--edge);
+  /* ---- the dial: twelve slots, grouped like the app prints the code ---- */
+  .dial-shell { position: relative; }
+  .dial {
+    display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
+    padding: 13px 11px;
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    border-radius: 13px;
+    backdrop-filter: blur(20px);
+    transition: border-color .18s ease, background .18s ease;
   }
-  .list-head h2 { font-size: 13px; font-weight: 600; margin: 0; }
-  .list-head span { font-size: 12px; color: var(--muted); }
-  .dev {
-    display: flex; align-items: center; gap: 14px;
-    padding: 14px 16px; margin-bottom: 8px;
-    background: var(--glass); border: 1px solid var(--edge); border-radius: 13px;
-    transition: background .15s ease;
+  .dial-shell:focus-within .dial { border-color: var(--edge-hi); background: var(--glass-hi); }
+  .cell {
+    flex: 1 1 0; min-width: 0;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: clamp(16px, 4.4vw, 25px);
+    line-height: 1.5;
+    color: var(--text);
+    border-radius: 8px;
+    background: rgba(255,255,255,.04);
   }
-  .dev:hover { background: var(--glass-hi); }
-  .dev .who { flex: 1; min-width: 0; }
-  .dev .name { font-size: 14px; font-weight: 600; }
-  .dev .meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
-  .tag {
-    font-size: 11px; padding: 4px 9px; border-radius: 999px;
-    border: 1px solid var(--edge); color: var(--muted); white-space: nowrap;
+  .cell.empty { color: transparent; }
+  .cell.active { box-shadow: inset 0 0 0 1.5px #fff; }
+  .sep { flex: none; width: 12px; text-align: center; color: var(--muted); }
+  .dial-shell input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; border: 0; padding: 0; font-size: 16px; /* 16px: iOS won't zoom */
+    background: transparent; color: transparent;
   }
-  .tag.on { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
-  .acc { margin-bottom: 22px; }
-  .acc-head { display: flex; align-items: baseline; gap: 10px; margin: 0 2px 10px; }
-  .acc-name { font-size: 14px; font-weight: 600; }
-  .acc-count { font-size: 11.5px; color: var(--muted); }
-  button.small { padding: 6px 12px; font-size: 12px; border-radius: 9px; }
-  .editor {
-    display: flex; flex-direction: column; gap: 10px;
-    padding: 14px 16px; margin: -4px 0 10px;
-    background: rgba(255,255,255,.03);
-    border: 1px solid var(--edge); border-top: 0;
-    border-radius: 0 0 13px 13px;
-  }
-  .editor .actions { margin-top: 4px; }
-  .empty-state { color: var(--muted); font-size: 13.5px; padding: 22px 2px; line-height: 1.6; }
+  .dial-said { font-size: 12.5px; color: var(--muted); min-height: 17px; line-height: 1.4; }
+
+  .empty-state { color: var(--muted); font-size: 13.5px; padding: 6px 2px 22px; line-height: 1.6; }
 
   .toast {
     position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
     background: #fff; color: #000; font-size: 13.5px; font-weight: 600;
     padding: 11px 18px; border-radius: 999px;
     opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease;
+    max-width: calc(100% - 40px); text-align: center;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .hidden { display: none !important; }
@@ -235,87 +259,18 @@ export default `<!doctype html>
     <div class="mark"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
     <h1>Broken IPTV · pannello</h1>
     <div class="sp"></div>
-    <button class="ghost" id="logout">Esci</button>
+    <button class="ghost small" id="logout">Esci</button>
   </header>
 
-  <p class="eyebrow">Codice del dispositivo</p>
-  <div class="dial-shell">
-    <div class="dial" id="dial"></div>
-    <input id="code" inputmode="latin" autocapitalize="characters" autocomplete="off"
-           spellcheck="false" maxlength="20" aria-label="Codice del dispositivo">
+  <div class="section-head">
+    <h2>Utenze</h2>
+    <div class="sp"></div>
+    <button class="ghost small" id="move-host">Cambia indirizzo</button>
+    <button class="small" id="new-account">Nuova utenza</button>
   </div>
-  <div class="hash" id="hash"></div>
+  <div id="accounts"></div>
 
-  <div class="card">
-    <h2>Dispositivo</h2>
-    <p class="hint">L'utenza raggruppa i dispositivi di una persona; il nome del dispositivo
-      serve a distinguerli. Nell'elenco i codici non si possono leggere.</p>
-    <div class="row2">
-      <div class="field" style="margin:0">
-        <label for="account">Utenza (la persona)</label>
-        <input type="text" id="account" placeholder="mamma" autocomplete="off" list="accounts">
-        <datalist id="accounts"></datalist>
-      </div>
-      <div class="field" style="margin:0">
-        <label for="note">Dispositivo</label>
-        <input type="text" id="note" placeholder="Firestick salotto">
-      </div>
-    </div>
-    <div class="actions">
-      <label class="switch">
-        <input type="checkbox" id="sync">
-        <span class="track"><span class="knob"></span></span>
-        <span class="lbl">Sincronizzazione
-          <small>Preferiti e Continua a guardare fra i suoi dispositivi</small>
-        </span>
-      </label>
-    </div>
-    <div class="actions">
-      <button id="save" disabled>Salva dispositivo</button>
-      <button class="ghost hidden" id="forget">Rimuovi</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Playlist</h2>
-    <p class="hint">Arriva cifrata con il codice: il server non può leggerla, e serve il codice
-      per inviarla — dall'elenco qui sotto non si può.</p>
-    <div class="field">
-      <label for="host">Indirizzo del pannello</label>
-      <input type="text" id="host" placeholder="http://esempio.tv:8080" autocomplete="off">
-    </div>
-    <div class="field">
-      <label for="plname">Nome della playlist sul dispositivo</label>
-      <input type="text" id="plname" placeholder="Playlist" autocomplete="off">
-    </div>
-    <div class="row2" style="margin-top:12px">
-      <div class="field" style="margin:0">
-        <label for="user">Utente</label>
-        <input type="text" id="user" autocomplete="off">
-      </div>
-      <div class="field" style="margin:0">
-        <label for="pass">Password</label>
-        <input type="text" id="pass" autocomplete="off">
-      </div>
-    </div>
-    <div class="field" style="margin-top:12px">
-      <label for="group">Sincronizza con (codice di un altro suo dispositivo) — opzionale</label>
-      <input type="text" id="group" placeholder="ABCD-EFGH-JKLM" autocomplete="off"
-             autocapitalize="characters" spellcheck="false">
-    </div>
-    <p class="hint" style="margin:8px 0 0">Con lo stesso codice su due dispositivi, preferiti e
-      Continua a guardare si allineano. La sincronizzazione segue quel codice: accendila sulla
-      sua riga qui sotto.</p>
-    <div class="actions">
-      <button id="send" disabled>Invia al dispositivo</button>
-    </div>
-  </div>
-
-  <div class="list-head">
-    <h2>Dispositivi</h2>
-    <span id="count"></span>
-  </div>
-  <div id="list"></div>
+  <div id="loose"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -325,7 +280,16 @@ export default `<!doctype html>
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN_KEY = 'brokeniptv.admin.token';
   var token = localStorage.getItem(TOKEN_KEY) || '';
-  var codes = [];
+
+  /* The alphabet the app uses for codes: no O/0, no I/1, so a code can be read
+     off a screen and typed on a remote. 32 symbols, and 256 % 32 === 0, so
+     taking a byte modulo 32 is unbiased. */
+  var ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  var state = { accounts: [], devices: [] };
+  /* Which card is expanded, so a reload doesn't collapse what you were doing.
+     'edit:<id>' | 'add:<id>' | 'new' */
+  var open = '';
 
   /* ---------- transport ---------- */
   function api(path, options) {
@@ -339,10 +303,18 @@ export default `<!doctype html>
     }).then(function (r) {
       if (r.status === 401) { signOut(); throw new Error('Token rifiutato.'); }
       return r.json().then(function (b) {
-        if (!r.ok) throw new Error(b && b.error ? b.error : 'Errore ' + r.status);
+        if (!r.ok) throw new Error(message(b && b.error));
         return b;
       });
     });
+  }
+
+  function message(code) {
+    if (code === 'unknown_account') return 'Questa utenza non esiste più. Ricarica la pagina.';
+    if (code === 'unknown_code') return 'Questo dispositivo non è registrato.';
+    if (code === 'bad_code') return 'Il codice ha dodici caratteri.';
+    if (code === 'bad_name') return 'Serve il nome dell’utenza.';
+    return code || 'Qualcosa non ha funzionato.';
   }
 
   function toast(text) {
@@ -350,7 +322,7 @@ export default `<!doctype html>
     t.textContent = text;
     t.classList.add('show');
     clearTimeout(t._timer);
-    t._timer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+    t._timer = setTimeout(function () { t.classList.remove('show'); }, 3000);
   }
 
   /* ---------- login ---------- */
@@ -363,12 +335,10 @@ export default `<!doctype html>
 
   function signIn(value) {
     token = value;
-    return api('codes').then(function (data) {
+    return reload().then(function () {
       localStorage.setItem(TOKEN_KEY, token);
       $('gate').classList.add('hidden');
       $('panel').classList.remove('hidden');
-      render(data.codes || []);
-      $('code').focus();
     });
   }
 
@@ -383,76 +353,17 @@ export default `<!doctype html>
   });
   $('logout').addEventListener('click', signOut);
 
-  /* ---------- the dial ---------- */
-  var ALPHABET = /[A-Z0-9]/;
-
-  function currentCode() {
-    return $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
-  }
-
-  function drawDial() {
-    var code = currentCode();
-    var dial = $('dial');
-    dial.textContent = '';
-    for (var i = 0; i < 12; i++) {
-      if (i === 4 || i === 8) {
-        var sep = document.createElement('span');
-        sep.className = 'sep';
-        sep.textContent = '–';
-        dial.appendChild(sep);
-      }
-      var cell = document.createElement('span');
-      var filled = i < code.length;
-      cell.className = 'cell' + (filled ? '' : ' empty') +
-        (i === code.length && document.activeElement === $('code') ? ' active' : '');
-      cell.textContent = filled ? code[i] : '·';
-      dial.appendChild(cell);
-    }
-  }
-
-  /* Shows the row key for the typed code — the only form of it the server ever
-     sees, and what identifies the device in the list below. */
-  function drawHash() {
-    var code = currentCode();
-    var out = $('hash');
-    if (code.length !== 12) { out.textContent = ''; return; }
-    rowId(code).then(function (id) {
-      out.textContent = 'Sul server finisce solo questo: ' + id.slice(0, 12) + '…';
-      var known = findByHash(id);
-      $('note').value = known ? (known.note || '') : $('note').value;
-      $('account').value = known ? (known.account || '') : $('account').value;
-      $('sync').checked = known ? !!known.sync_enabled : $('sync').checked;
-      $('forget').classList.toggle('hidden', !known);
-    });
-  }
-
-  function findByHash(id) {
-    for (var i = 0; i < codes.length; i++) if (codes[i].id === id) return codes[i];
-    return null;
-  }
-
-  function refreshButtons() {
-    var ready = currentCode().length === 12;
-    $('save').disabled = !ready;
-    $('send').disabled = !ready;
-  }
-
-  $('code').addEventListener('input', function () {
-    var code = currentCode();
-    // Keep the field's own value canonical, so a pasted "abcd-efgh-jklm" and a
-    // typed one behave the same.
-    $('code').value = code;
-    drawDial(); drawHash(); refreshButtons();
-  });
-  $('code').addEventListener('focus', drawDial);
-  $('code').addEventListener('blur', drawDial);
-  $('dial').addEventListener('click', function () { $('code').focus(); });
-
   /* ---------- crypto ----------
-     key = SHA-256("broken-iptv-provision:" + code). The code is 12 chars from
-     a 32-symbol alphabet (~60 bits), so stretching buys nothing a brute force
-     could not already ignore; what matters is that the key never leaves this
-     page and the device derives the same one. */
+     Two derivations, both from things this page already has:
+
+       utenza code = HMAC-SHA256(token, 'broken-iptv-account:' + id) -> 12
+         symbols of the app's alphabet. Never stored, recomputed on every
+         render: the database alone opens nothing, the token opens everything.
+       payload key = SHA-256('broken-iptv-provision:' + code)
+         The app derives the same one. Codes are 12 chars of a 32-symbol
+         alphabet (~60 bits) from a secure generator, so stretching buys
+         nothing a brute force could not already ignore — and a Firestick
+         doesn't spend a second of CPU at every launch. */
   function bytes(text) { return new TextEncoder().encode(text); }
 
   function hex(buffer) {
@@ -465,70 +376,87 @@ export default `<!doctype html>
     return crypto.subtle.digest('SHA-256', bytes('broken-iptv-sync:' + code)).then(hex);
   }
 
-  function encrypt(code, payload) {
-    return crypto.subtle.digest('SHA-256', bytes('broken-iptv-provision:' + code))
-      .then(function (raw) {
-        return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
-      })
+  function newAccountId() {
+    return hex(crypto.getRandomValues(new Uint8Array(16)));
+  }
+
+  function accountCode(accountId) {
+    return crypto.subtle
+      .importKey('raw', bytes(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
       .then(function (key) {
-        var iv = crypto.getRandomValues(new Uint8Array(12));
-        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, bytes(payload))
-          .then(function (cipher) {
-            var joined = new Uint8Array(iv.length + cipher.byteLength);
-            joined.set(iv, 0);
-            joined.set(new Uint8Array(cipher), iv.length);
-            var binary = '';
-            for (var i = 0; i < joined.length; i++) binary += String.fromCharCode(joined[i]);
-            return btoa(binary);
-          });
+        return crypto.subtle.sign('HMAC', key, bytes('broken-iptv-account:' + accountId));
+      })
+      .then(function (mac) {
+        var view = new Uint8Array(mac), out = '';
+        for (var i = 0; i < 12; i++) out += ALPHABET[view[i] % 32];
+        return out;
       });
   }
 
-  /* ---------- actions ---------- */
-  $('save').addEventListener('click', function () {
-    api('codes', { method: 'POST', body: {
-      code: currentCode(), note: $('note').value.trim(),
-      account: $('account').value.trim(), syncEnabled: $('sync').checked
-    } }).then(function () {
-      toast('Dispositivo salvato');
-      return reload();
-    }).catch(function (e) { toast(e.message); });
-  });
-
-  $('forget').addEventListener('click', function () {
-    if (!confirm('Rimuovere il dispositivo? Perde la playlist e i dati sincronizzati.')) return;
-    api('forget', { method: 'POST', body: { code: currentCode() } })
-      .then(function () { toast('Dispositivo rimosso'); return reload(); })
-      .catch(function (e) { toast(e.message); });
-  });
-
-  $('send').addEventListener('click', function () {
-    var host = $('host').value.trim();
-    var user = $('user').value.trim();
-    var pass = $('pass').value;
-    if (!host || !user) { toast('Servono indirizzo e utente.'); return; }
-    var group = $('group').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (group && group.length !== 12) { toast('Il codice del gruppo ha 12 caratteri.'); return; }
-    var payload = JSON.stringify({
-      host: host, username: user, password: pass,
-      name: $('plname').value.trim() || 'Playlist',
-      syncCode: group || undefined,
-      at: Date.now()
-    });
-    var code = currentCode();
-    encrypt(code, payload)
-      .then(function (data) { return api('profile', { method: 'POST', body: { code: code, data: data } }); })
-      .then(function () {
-        toast('Playlist inviata');
-        $('pass').value = '';
-        return reload();
-      })
-      .catch(function (e) {
-        toast(e.message === 'unknown_code' ? 'Salva prima il dispositivo.' : e.message);
+  function keyFor(code, usage) {
+    return crypto.subtle.digest('SHA-256', bytes('broken-iptv-provision:' + code))
+      .then(function (raw) {
+        return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, [usage]);
       });
-  });
+  }
 
-  /* ---------- list ---------- */
+  function encrypt(code, payload) {
+    return keyFor(code, 'encrypt').then(function (key) {
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, bytes(payload))
+        .then(function (cipher) {
+          var joined = new Uint8Array(iv.length + cipher.byteLength);
+          joined.set(iv, 0);
+          joined.set(new Uint8Array(cipher), iv.length);
+          var binary = '';
+          for (var i = 0; i < joined.length; i++) binary += String.fromCharCode(joined[i]);
+          return btoa(binary);
+        });
+    });
+  }
+
+  /* Reading a playlist back is not a bonus feature, it is what makes the card
+     editable: without it "cambia solo l'indirizzo" would mean retyping the
+     password from memory. It works because the token is the master key. */
+  function decrypt(code, base64) {
+    return keyFor(code, 'decrypt').then(function (key) {
+      var binary = atob(base64);
+      var raw = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) raw[i] = binary.charCodeAt(i);
+      return crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12)
+      );
+    }).then(function (clear) {
+      return JSON.parse(new TextDecoder().decode(clear));
+    }).catch(function () { return null; });
+  }
+
+  /* ---------- small helpers ---------- */
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function field(labelText, input) {
+    var box = el('div');
+    var lab = el('label', null, labelText);
+    lab.setAttribute('for', input.id || '');
+    box.appendChild(lab);
+    box.appendChild(input);
+    return box;
+  }
+
+  function textInput(value, placeholder) {
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = value || '';
+    input.placeholder = placeholder || '';
+    input.autocomplete = 'off';
+    return input;
+  }
+
   function ago(ms) {
     if (!ms) return 'mai';
     var s = Math.floor((Date.now() - ms) / 1000);
@@ -538,174 +466,529 @@ export default `<!doctype html>
     return Math.round(s / 86400) + ' giorni fa';
   }
 
-  /* Modifica in riga di un dispositivo GIA' registrato. Passa per l'hash e non
-     per il codice: quello non ce l'ha piu' nessuno, e per rinominare, spostare
-     di utenza o rimuovere non serve — serve solo per cifrare una playlist. */
-  function editorFor(row) {
-    var box = document.createElement("div");
-    box.className = "editor";
+  function devicesOf(accountId) {
+    return state.devices.filter(function (d) { return d.account_id === accountId; });
+  }
 
-    var acc = document.createElement("input");
-    acc.type = "text"; acc.value = row.account || ""; acc.placeholder = "Utenza";
-    acc.setAttribute("list", "accounts");
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
-    var name = document.createElement("input");
-    name.type = "text"; name.value = row.note || ""; name.placeholder = "Dispositivo";
+  /* ---------- the dial ---------- */
+  /* Twelve slots, grouped the way the app prints the code, so what you type
+     looks like what is being read to you. */
+  function dial(onReady) {
+    var shell = el('div', 'dial-shell');
+    var cells = el('div', 'dial');
+    var input = document.createElement('input');
+    input.setAttribute('inputmode', 'latin');
+    input.setAttribute('autocapitalize', 'characters');
+    input.setAttribute('spellcheck', 'false');
+    input.autocomplete = 'off';
+    input.maxLength = 20;
+    input.setAttribute('aria-label', 'Codice del dispositivo');
 
-    var save = document.createElement("button");
-    save.textContent = "Salva";
-    save.addEventListener("click", function () {
-      api("device", { method: "POST", body: {
-        id: row.id, note: name.value.trim(), account: acc.value.trim(),
-        syncEnabled: !!row.sync_enabled
-      } }).then(function () { toast("Dispositivo aggiornato"); return reload(); })
-        .catch(function (e) { toast(e.message); });
+    function value() {
+      return input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    }
+
+    function draw() {
+      var code = value();
+      cells.textContent = '';
+      for (var i = 0; i < 12; i++) {
+        if (i === 4 || i === 8) cells.appendChild(el('span', 'sep', '–'));
+        var filled = i < code.length;
+        var cell = el('span', 'cell' + (filled ? '' : ' empty') +
+          (i === code.length && document.activeElement === input ? ' active' : ''),
+          filled ? code[i] : '·');
+        cells.appendChild(cell);
+      }
+    }
+
+    input.addEventListener('input', function () {
+      input.value = value();
+      draw();
+      onReady(value());
+    });
+    input.addEventListener('focus', draw);
+    input.addEventListener('blur', draw);
+    cells.addEventListener('click', function () { input.focus(); });
+
+    shell.appendChild(cells);
+    shell.appendChild(input);
+    draw();
+    shell.focusField = function () { input.focus(); };
+    shell.value = value;
+    return shell;
+  }
+
+  /* ---------- utenza: the editor ---------- */
+  /* One form for "nuova" and "modifica": the difference is only whether we
+     already have an id, and whether the fields arrive from the stored blob. */
+  function accountEditor(account) {
+    var isNew = !account;
+    var id = isNew ? newAccountId() : account.id;
+
+    var box = el('div', 'editor');
+    var name = textInput(isNew ? '' : account.name, 'mamma');
+    var host = textInput('', 'http://esempio.tv:8080');
+    var user = textInput('', 'utente');
+
+    var pass = document.createElement('input');
+    pass.type = 'password';
+    pass.autocomplete = 'new-password';
+    pass.placeholder = 'password';
+    var reveal = el('button', 'ghost small', 'Mostra');
+    reveal.type = 'button';
+    reveal.addEventListener('click', function () {
+      var hidden = pass.type === 'password';
+      pass.type = hidden ? 'text' : 'password';
+      reveal.textContent = hidden ? 'Nascondi' : 'Mostra';
+    });
+    var pwRow = el('div', 'pw');
+    pwRow.appendChild(pass);
+    pwRow.appendChild(reveal);
+
+    var sync = document.createElement('input');
+    sync.type = 'checkbox';
+    sync.checked = !isNew && !!account.sync_enabled;
+    var track = el('span', 'track');
+    track.appendChild(el('span', 'knob'));
+    var switchBox = el('label', 'switch');
+    var lbl = el('span', 'lbl', 'Preferiti condivisi');
+    lbl.appendChild(el('small', null,
+      'I suoi dispositivi vedono gli stessi preferiti e lo stesso "Continua a guardare".'));
+    switchBox.appendChild(sync);
+    switchBox.appendChild(track);
+    switchBox.appendChild(lbl);
+
+    var save = el('button', null, isNew ? 'Crea utenza' : 'Salva e invia ai dispositivi');
+    var cancel = el('button', 'ghost', 'Annulla');
+    var actions = el('div', 'actions');
+    actions.appendChild(save);
+    actions.appendChild(cancel);
+
+    if (!isNew) {
+      // Pushed away from Salva/Annulla: it is the one button here you cannot
+      // undo, and it should not sit under the thumb that reaches for Annulla.
+      var spacer = el('div');
+      spacer.style.flex = '1';
+      actions.appendChild(spacer);
+      var remove = el('button', 'ghost', 'Rimuovi utenza');
+      remove.addEventListener('click', function () {
+        var n = devicesOf(id).length;
+        if (!confirm('Rimuovere ' + account.name + '? ' +
+          (n ? plural(n, 'dispositivo resta', 'dispositivi restano') + ' senza playlist.'
+             : 'Non ha dispositivi.'))) return;
+        api('forget-account', { method: 'POST', body: { id: id } })
+          .then(function () { open = ''; toast('Utenza rimossa'); return reload(); })
+          .catch(function (e) { toast(e.message); });
+      });
+      actions.appendChild(remove);
+    }
+
+    box.appendChild(field('Nome dell’utenza', name));
+    box.appendChild(field('Indirizzo del pannello', host));
+    var creds = el('div', 'row2');
+    creds.appendChild(field('Utente', user));
+    creds.appendChild(field('Password', pwRow));
+    box.appendChild(creds);
+    box.appendChild(switchBox);
+    box.appendChild(el('p', 'note',
+      'Salvando, la playlist riparte verso tutti i dispositivi di questa utenza: la ' +
+      'ricevono alla prima apertura dell’app.'));
+    box.appendChild(actions);
+
+    /* Prefill from what is stored. The blob is encrypted with the utenza's
+       code, which this page can derive — so the form opens on the real
+       credentials instead of asking for them again. */
+    if (!isNew && account.data) {
+      accountCode(id)
+        .then(function (code) { return decrypt(code, account.data); })
+        .then(function (payload) {
+          if (!payload) {
+            toast('La playlist di ' + account.name + ' non si apre con questo token.');
+            return;
+          }
+          host.value = payload.host || '';
+          user.value = payload.username || '';
+          pass.value = payload.password || '';
+        });
+    }
+
+    save.addEventListener('click', function () {
+      var label = name.value.trim();
+      if (!label) { toast('Serve il nome dell’utenza.'); return; }
+      var address = host.value.trim();
+      var username = user.value.trim();
+      if ((address || username) && !(address && username)) {
+        toast('Servono sia l’indirizzo sia l’utente.');
+        return;
+      }
+      save.disabled = true;
+      accountCode(id).then(function (code) {
+        return Promise.all([
+          rowId(code),
+          address ? encrypt(code, JSON.stringify({
+            host: address, username: username, password: pass.value,
+            name: label, at: Date.now()
+          })) : null
+        ]);
+      }).then(function (parts) {
+        return api('account', { method: 'POST', body: {
+          id: id, name: label, syncId: parts[0],
+          syncEnabled: sync.checked, data: parts[1]
+        } });
+      }).then(function () {
+        open = '';
+        toast(isNew ? 'Utenza creata' : 'Playlist inviata ai dispositivi');
+        return reload();
+      }).catch(function (e) {
+        save.disabled = false;
+        toast(e.message);
+      });
     });
 
-    var del = document.createElement("button");
-    del.className = "ghost";
-    del.textContent = "Rimuovi";
-    del.addEventListener("click", function () {
-      if (!confirm("Rimuovere questo dispositivo? Perde playlist e dati sincronizzati.")) return;
-      api("forget-device", { method: "POST", body: { id: row.id } })
-        .then(function () { toast("Dispositivo rimosso"); return reload(); })
-        .catch(function (e) { toast(e.message); });
-    });
-
-    var actions = document.createElement("div");
-    actions.className = "actions";
-    actions.appendChild(save); actions.appendChild(del);
-
-    box.appendChild(acc); box.appendChild(name); box.appendChild(actions);
+    cancel.addEventListener('click', function () { open = ''; render(); });
+    setTimeout(function () { name.focus(); }, 0);
     return box;
   }
 
-  function deviceRow(row) {
-    var el = document.createElement("div");
-    el.className = "dev";
+  /* ---------- utenza: adding a device ---------- */
+  /* The only flow that needs the code read out loud, so it is the only place
+     with a dial. What gets written is the *casellina*: which utenza this
+     device belongs to, encrypted with its own code. */
+  function deviceAdder(account) {
+    var box = el('div', 'editor');
+    var said = el('div', 'dial-said', 'Fattelo leggere dallo schermo del dispositivo.');
+    var name = textInput('', 'Firestick del salotto');
+    var link = el('button', null, 'Collega a ' + account.name);
+    link.disabled = true;
+    var cancel = el('button', 'ghost', 'Annulla');
 
-    var who = document.createElement("div");
-    who.className = "who";
-    var name = document.createElement("div");
-    name.className = "name";
-    name.textContent = row.note || "senza nome";
-    var meta = document.createElement("div");
-    meta.className = "meta";
-    meta.textContent = row.id.slice(0, 12) + " · " + ago(row.last_seen);
-    who.appendChild(name); who.appendChild(meta);
-
-    var playlist = document.createElement("span");
-    playlist.className = "tag" + (row.has_profile ? " on" : "");
-    playlist.textContent = row.has_profile ? "playlist" : "senza playlist";
-
-    var sync = document.createElement("span");
-    sync.className = "tag" + (row.sync_enabled ? " on" : "");
-    sync.textContent = row.sync_enabled ? "sync" : "sync off";
-
-    var edit = document.createElement("button");
-    edit.className = "ghost small";
-    edit.textContent = "Modifica";
-
-    el.appendChild(who); el.appendChild(playlist); el.appendChild(sync); el.appendChild(edit);
-
-    var wrap = document.createElement("div");
-    wrap.appendChild(el);
-    var open = false;
-    edit.addEventListener("click", function () {
-      open = !open;
-      if (open) { wrap.appendChild(editorFor(row)); edit.textContent = "Chiudi"; }
-      else { wrap.removeChild(wrap.lastChild); edit.textContent = "Modifica"; }
+    var pad = dial(function (code) {
+      link.disabled = code.length !== 12;
+      if (code.length !== 12) {
+        said.textContent = 'Fattelo leggere dallo schermo del dispositivo.';
+        return;
+      }
+      /* Say something true about the code as soon as it is complete: the same
+         hash the server stores is what tells us we already know this device. */
+      rowId(code).then(function (id) {
+        var known = state.devices.filter(function (d) { return d.id === id; })[0];
+        if (!known) { said.textContent = 'Dispositivo nuovo.'; return; }
+        var owner = state.accounts.filter(function (a) { return a.id === known.account_id; })[0];
+        if (!owner) {
+          said.textContent = 'Già registrato (' + (known.note || 'senza nome') + '), senza utenza.';
+        } else if (owner.id === account.id) {
+          said.textContent = 'È già di ' + account.name + ': lo aggiorni.';
+        } else {
+          said.textContent = 'Ora è di ' + owner.name + ': passa a ' + account.name + '.';
+        }
+        if (known.note && !name.value) name.value = known.note;
+      });
     });
-    return wrap;
+
+    link.addEventListener('click', function () {
+      var code = pad.value();
+      link.disabled = true;
+      accountCode(account.id).then(function (shared) {
+        return encrypt(code, JSON.stringify({
+          account: shared, accountId: account.id, at: Date.now()
+        }));
+      }).then(function (casellina) {
+        return api('device', { method: 'POST', body: {
+          code: code, accountId: account.id,
+          note: name.value.trim(), casellina: casellina
+        } });
+      }).then(function () {
+        open = '';
+        toast('Dispositivo collegato a ' + account.name);
+        return reload();
+      }).catch(function (e) { link.disabled = false; toast(e.message); });
+    });
+    cancel.addEventListener('click', function () { open = ''; render(); });
+
+    box.appendChild(field('Codice del dispositivo', pad));
+    box.appendChild(said);
+    box.appendChild(field('Come si chiama', name));
+    box.appendChild(el('p', 'note',
+      'Il codice serve solo adesso: da qui in poi il dispositivo si riconosce da solo, e ' +
+      'le correzioni alla playlist gli arrivano senza chiederglielo di nuovo.'));
+    var actions = el('div', 'actions');
+    actions.appendChild(link);
+    actions.appendChild(cancel);
+    box.appendChild(actions);
+
+    setTimeout(function () { pad.focusField(); }, 0);
+    return box;
   }
 
-  function accountBlock(account, rows) {
-    var head = document.createElement("div");
-    head.className = "acc-head";
+  /* ---------- moving everybody to a new address ---------- */
+  /* When the provider changes domain, every utenza on it is wrong at once —
+     and editing them one card at a time is exactly the work this panel exists
+     to avoid. Possible because this page can open all of them: it re-encrypts
+     each playlist with the new address and leaves its own utente e password
+     alone. */
+  function hostChanger() {
+    var box = el('div', 'editor');
+    var found = el('p', 'note', 'Apro le playlist...');
+    var from = textInput('', 'vuoto = tutte');
+    var to = textInput('', 'http://nuovo.tv:8080');
+    var apply = el('button', null, 'Aggiorna');
+    var cancel = el('button', 'ghost', 'Annulla');
+    apply.disabled = true;
 
-    var title = document.createElement("div");
-    title.className = "acc-name";
-    title.textContent = account || "Senza utenza";
+    /* [{ account, code, payload }] for every utenza whose playlist opens. */
+    var opened = [];
 
-    var count = document.createElement("span");
-    count.className = "acc-count";
-    count.textContent = rows.length + (rows.length === 1 ? " dispositivo" : " dispositivi");
+    function matching() {
+      var wanted = from.value.trim();
+      return opened.filter(function (o) { return !wanted || o.payload.host === wanted; });
+    }
 
-    /* Un solo interruttore per tutta l'utenza: lo accendi una volta e vale per
-       ogni dispositivo che le hai registrato sotto. */
-    var allOn = rows.every(function (r) { return r.sync_enabled; });
-    var toggle = document.createElement("button");
-    toggle.className = allOn ? "small" : "ghost small";
-    toggle.textContent = allOn ? "Sync acceso" : "Accendi sync";
-    toggle.disabled = !account;
-    toggle.addEventListener("click", function () {
-      api("account-sync", { method: "POST", body: { account: account, syncEnabled: !allOn } })
-        .then(function (r) {
-          toast((allOn ? "Sync spento su " : "Sync acceso su ") + r.changed + " dispositivi");
-          return reload();
-        })
+    function refresh() {
+      var n = matching().length;
+      apply.disabled = !to.value.trim() || !n;
+      apply.textContent = n === 1 ? 'Aggiorna 1 utenza' : 'Aggiorna ' + n + ' utenze';
+    }
+    from.addEventListener('input', refresh);
+    to.addEventListener('input', refresh);
+
+    Promise.all(state.accounts.filter(function (a) { return a.data; }).map(function (a) {
+      return accountCode(a.id)
+        .then(function (code) {
+          return decrypt(code, a.data).then(function (payload) {
+            return payload ? { account: a, code: code, payload: payload } : null;
+          });
+        });
+    })).then(function (rows) {
+      opened = rows.filter(Boolean);
+      var counts = {}, order = [];
+      opened.forEach(function (o) {
+        if (!counts[o.payload.host]) { counts[o.payload.host] = 0; order.push(o.payload.host); }
+        counts[o.payload.host]++;
+      });
+      if (!order.length) {
+        found.textContent = 'Nessuna playlist da spostare.';
+        return;
+      }
+      order.sort(function (a, b) { return counts[b] - counts[a]; });
+      found.textContent = 'In uso: ' + order.map(function (h) {
+        return h + ' (' + counts[h] + ')';
+      }).join(' · ');
+      from.value = order[0];
+      refresh();
+    });
+
+    apply.addEventListener('click', function () {
+      var address = to.value.trim();
+      var rows = matching();
+      apply.disabled = true;
+      /* One at a time: a handful of utenze, and a failure halfway through
+         should say which ones already moved. */
+      var done = 0;
+      rows.reduce(function (chain, o) {
+        return chain.then(function () {
+          return encrypt(o.code, JSON.stringify({
+            host: address,
+            username: o.payload.username,
+            password: o.payload.password,
+            name: o.payload.name || o.account.name,
+            at: Date.now()
+          })).then(function (data) {
+            return api('account', { method: 'POST', body: {
+              id: o.account.id, name: o.account.name, syncId: o.account.sync_id,
+              syncEnabled: !!o.account.sync_enabled, data: data
+            } });
+          }).then(function () { done++; });
+        });
+      }, Promise.resolve()).then(function () {
+        open = '';
+        toast('Indirizzo aggiornato su ' + done + (done === 1 ? ' utenza' : ' utenze'));
+        return reload();
+      }).catch(function (e) {
+        toast('Aggiornate ' + done + ' su ' + rows.length + '. ' + e.message);
+        apply.disabled = false;
+      });
+    });
+    cancel.addEventListener('click', function () { open = ''; render(); });
+
+    box.appendChild(found);
+    var pair = el('div', 'row2');
+    pair.appendChild(field('Indirizzo da sostituire', from));
+    pair.appendChild(field('Nuovo indirizzo', to));
+    box.appendChild(pair);
+    box.appendChild(el('p', 'note',
+      'Utente e password di ognuna restano quelli che sono: cambia solo l’indirizzo. ' +
+      'Ogni dispositivo lo riceve alla prima apertura.'));
+    var actions = el('div', 'actions');
+    actions.appendChild(apply);
+    actions.appendChild(cancel);
+    box.appendChild(actions);
+    setTimeout(function () { to.focus(); }, 0);
+    return box;
+  }
+
+  /* ---------- rows ---------- */
+  function deviceRow(device) {
+    var row = el('div', 'dev');
+    var who = el('div', 'who');
+    var name = textInput(device.note || '', 'Senza nome');
+    name.addEventListener('change', function () {
+      api('device-edit', { method: 'POST', body: { id: device.id, note: name.value.trim() } })
+        .then(function () { toast('Nome aggiornato'); return reload(); })
+        .catch(function (e) { toast(e.message); });
+    });
+    who.appendChild(name);
+    who.appendChild(el('div', 'meta',
+      device.id.slice(0, 12) + ' · visto ' + ago(device.last_seen) +
+      (device.has_casellina ? '' : ' · senza casellina')));
+
+    var forget = el('button', 'ghost small', 'Rimuovi');
+    forget.addEventListener('click', function () {
+      if (!confirm('Rimuovere "' + (device.note || 'questo dispositivo') +
+        '"? Torna com’era appena installato.')) return;
+      api('forget-device', { method: 'POST', body: { id: device.id } })
+        .then(function () { toast('Dispositivo rimosso'); return reload(); })
         .catch(function (e) { toast(e.message); });
     });
 
-    head.appendChild(title); head.appendChild(count);
-    var sp = document.createElement("div"); sp.style.flex = "1";
-    head.appendChild(sp); head.appendChild(toggle);
-
-    var block = document.createElement("div");
-    block.className = "acc";
-    block.appendChild(head);
-    rows.forEach(function (r) { block.appendChild(deviceRow(r)); });
-    return block;
+    row.appendChild(who);
+    row.appendChild(forget);
+    return row;
   }
 
-  function render(rows) {
-    codes = rows;
-    $("count").textContent = rows.length ? rows.length + " registrati" : "";
+  function accountCard(account) {
+    var card = el('div', 'acct');
+    var devices = devicesOf(account.id);
 
-    var names = [];
-    rows.forEach(function (r) {
-      if (r.account && names.indexOf(r.account) < 0) names.push(r.account);
-    });
-    var dl = $("accounts");
-    dl.textContent = "";
-    names.forEach(function (n) {
-      var o = document.createElement("option"); o.value = n; dl.appendChild(o);
-    });
+    var top = el('div', 'acct-top');
+    var idBox = el('div', 'acct-id');
+    idBox.appendChild(el('div', 'acct-name', account.name));
 
-    var list = $("list");
-    list.textContent = "";
-    if (!rows.length) {
-      var empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Nessun dispositivo. Scrivi qui sopra il codice che ti hanno letto e salvalo.";
-      list.appendChild(empty);
-      return;
+    /* The summary line is the credentials, in mono, because that is what you
+       came to check. The password is not shown until you open the editor. */
+    var summary = el('div', 'acct-creds');
+    if (account.data) {
+      summary.textContent = 'playlist inviata ' + ago(account.updated_at);
+      accountCode(account.id)
+        .then(function (code) { return decrypt(code, account.data); })
+        .then(function (payload) {
+          if (!payload) { summary.textContent = 'playlist illeggibile con questo token'; return; }
+          summary.textContent = payload.host + ' · ' + payload.username;
+        });
+    } else {
+      summary.className = 'acct-creds none';
+      summary.textContent = 'Nessuna playlist: i suoi dispositivi restano fermi.';
+    }
+    idBox.appendChild(summary);
+    top.appendChild(idBox);
+
+    // Only the state you can't see anywhere else: how many devices there are
+    // is the list right below.
+    if (account.sync_enabled) top.appendChild(el('span', 'tag on', 'preferiti condivisi'));
+    card.appendChild(top);
+
+    var devBox = el('div', 'devs');
+    if (devices.length) {
+      devices.forEach(function (d) { devBox.appendChild(deviceRow(d)); });
+    } else {
+      devBox.appendChild(el('div', 'dev-none',
+        'Nessun dispositivo. Serve il codice che mostra la sua app.'));
+    }
+    card.appendChild(devBox);
+
+    if (open === 'edit:' + account.id) {
+      card.appendChild(accountEditor(account));
+    } else if (open === 'add:' + account.id) {
+      card.appendChild(deviceAdder(account));
+    } else {
+      var actions = el('div', 'actions');
+      actions.style.marginTop = '14px';
+      var edit = el('button', 'ghost small', 'Playlist e nome');
+      edit.addEventListener('click', function () { open = 'edit:' + account.id; render(); });
+      var add = el('button', 'small', 'Aggiungi dispositivo');
+      add.addEventListener('click', function () { open = 'add:' + account.id; render(); });
+      actions.appendChild(add);
+      actions.appendChild(edit);
+      card.appendChild(actions);
+    }
+    return card;
+  }
+
+  /* Devices registered before utenze existed, or left behind when one was
+     removed. They can't be moved from here: hooking a device to an utenza
+     means writing its casellina, and that needs its code. */
+  function looseSection(devices) {
+    var box = el('div');
+    var head = el('div', 'section-head section-gap');
+    head.appendChild(el('h2', null, 'Senza utenza'));
+    box.appendChild(head);
+
+    var card = el('div', 'acct');
+    card.appendChild(el('p', 'note',
+      'Per collegarli serve di nuovo il loro codice: aprilo da "Aggiungi dispositivo" ' +
+      'nell’utenza giusta. Finché restano qui non ricevono nessuna playlist.'));
+    var devBox = el('div', 'devs');
+    devices.forEach(function (d) { devBox.appendChild(deviceRow(d)); });
+    card.appendChild(devBox);
+    box.appendChild(card);
+    return box;
+  }
+
+  /* ---------- render ---------- */
+  function render() {
+    var list = $('accounts');
+    list.textContent = '';
+
+    if (open === 'new') {
+      var fresh = el('div', 'acct');
+      fresh.appendChild(el('div', 'acct-name', 'Nuova utenza'));
+      fresh.appendChild(accountEditor(null));
+      list.appendChild(fresh);
     }
 
-    var groups = {};
-    var order = [];
-    rows.forEach(function (r) {
-      var key = r.account || "";
-      if (!groups[key]) { groups[key] = []; order.push(key); }
-      groups[key].push(r);
-    });
-    order.sort(function (a, b) {
-      if (!a) return 1;
-      if (!b) return -1;
-      return a.localeCompare(b);
-    });
-    order.forEach(function (k) { list.appendChild(accountBlock(k, groups[k])); });
+    if (open === 'host') {
+      var moving = el('div', 'acct');
+      moving.appendChild(el('div', 'acct-name', 'Cambia indirizzo'));
+      moving.appendChild(el('div', 'acct-creds none',
+        'Il pannello ha cambiato dominio? Riscrivilo su tutte le utenze in un colpo.'));
+      moving.appendChild(hostChanger());
+      list.appendChild(moving);
+    }
+
+    if (!state.accounts.length && open !== 'new') {
+      list.appendChild(el('div', 'empty-state',
+        'Nessuna utenza. Creane una con il nome della persona e i dati del suo ' +
+        'abbonamento: i dispositivi si agganciano dopo, uno alla volta.'));
+    }
+
+    state.accounts.forEach(function (a) { list.appendChild(accountCard(a)); });
+
+    var loose = $('loose');
+    loose.textContent = '';
+    var orphans = state.devices.filter(function (d) { return !d.account_id; });
+    if (orphans.length) loose.appendChild(looseSection(orphans));
   }
 
+  $('new-account').addEventListener('click', function () {
+    open = 'new';
+    render();
+  });
+
+  $('move-host').addEventListener('click', function () {
+    open = open === 'host' ? '' : 'host';
+    render();
+  });
+
   function reload() {
-    return api('codes').then(function (data) {
-      render(data.codes || []);
-      drawHash();
+    return api('state').then(function (data) {
+      state.accounts = data.accounts || [];
+      state.devices = data.devices || [];
+      render();
     });
   }
 
   /* ---------- boot ---------- */
-  drawDial();
   if (token) {
     signIn(token).catch(function () { signOut(); });
   } else {

@@ -11,11 +11,25 @@ import 'sync_merge.dart';
 /// password read out over the phone.
 ///
 /// The device shows a **code** on the very first screen; the person reads it to
-/// whoever set the app up for them; that person types it in the panel and sends
-/// the playlist down. What travels is encrypted **with the code itself**, so
-/// the server stores bytes it cannot read — the same property the sync blob
-/// already had, where the code is the only secret and the database only ever
-/// sees its hash.
+/// whoever set the app up for them; that person types it in the panel and hooks
+/// the device to an **utenza** — the IPTV account itself, with its address, its
+/// username and its password.
+///
+/// So there are two steps, and the split is the point:
+///
+///  1. `/v1/profile/<device code>` holds a **casellina**, written once, that
+///     says which utenza this device belongs to. It is encrypted with the
+///     device's own code, which is why registering needs somebody to read it
+///     out loud.
+///  2. `/v1/account/<utenza id>` holds the playlist, encrypted with the
+///     **utenza's** code. That one blob is shared by every device of that
+///     person, so correcting a password reaches all of them at once — nobody
+///     has to dig their codes up again.
+///
+/// Either way the server stores bytes it cannot read. The utenza's code is
+/// derived by the panel from the admin token (HMAC), never stored: a dump of
+/// the database opens nothing, while whoever holds the token opens everything.
+/// That trade is what buys step 2.
 
 /// The device's own code: its identity in the panel, and (when the owner turns
 /// sync on) the sync secret too.
@@ -137,10 +151,14 @@ class ProvisioningService {
 
   final Dio _dio;
 
-  static Uri profileUri(String endpoint, String code) {
-    final base = endpoint.trim().replaceAll(RegExp(r'/+$'), '');
-    return Uri.parse('$base/v1/profile/$code');
-  }
+  static Uri profileUri(String endpoint, String code) =>
+      _uri(endpoint, '/v1/profile/$code');
+
+  static Uri accountUri(String endpoint, String accountId) =>
+      _uri(endpoint, '/v1/account/$accountId');
+
+  static Uri _uri(String endpoint, String path) =>
+      Uri.parse('${endpoint.trim().replaceAll(RegExp(r'/+$'), '')}$path');
 
   /// The playlist waiting for this device, or null when there is none (the
   /// normal case). Never throws: the screen that polls this must not turn a
@@ -150,41 +168,102 @@ class ProvisioningService {
     required String code,
   }) async {
     try {
-      final resp = await _dio.getUri<String>(
-        profileUri(endpoint, code),
-        options: Options(
-          responseType: ResponseType.plain,
-          // 404 (nothing waiting) and 403 (code not in the panel) are both
-          // "no playlist", not failures.
-          validateStatus: (s) => s == 200 || s == 404 || s == 403,
-          headers: const {'Cache-Control': 'no-cache'},
-        ),
-      );
-      if (resp.statusCode != 200) return null;
-      final envelope = jsonDecode(resp.data ?? '');
-      if (envelope is! Map) return null;
+      final envelope = await _envelope(profileUri(endpoint, code));
+      if (envelope == null) return null;
       final payload = await decryptProvisioning(
         envelope['data']?.toString() ?? '',
         code,
       );
       if (payload == null) return null;
+      final writtenAt = (envelope['updatedAt'] as num?)?.toInt() ?? 0;
 
-      final host = payload['host']?.toString().trim() ?? '';
-      final username = payload['username']?.toString().trim() ?? '';
-      if (host.isEmpty || username.isEmpty) return null;
+      final account = normalizeSyncCode(payload['account']?.toString() ?? '');
+      final accountId = payload['accountId']?.toString().trim() ?? '';
+      if (account != null && accountId.isNotEmpty) {
+        return _fromAccount(
+          endpoint: endpoint,
+          accountId: accountId,
+          accountCode: account,
+          casellinaAt: writtenAt,
+        );
+      }
 
-      final syncCode = normalizeSyncCode(payload['syncCode']?.toString() ?? '');
-      final name = payload['name']?.toString().trim() ?? '';
-      return ProvisionedProfile(
-        name: name.isEmpty ? 'Playlist' : name,
-        host: host,
-        username: username,
-        password: payload['password']?.toString() ?? '',
-        updatedAt: (envelope['updatedAt'] as num?)?.toInt() ?? 0,
-        syncCode: syncCode,
-      );
+      // Before utenze existed the panel wrote the playlist straight into the
+      // device's slot. Still read it, so a device configured back then doesn't
+      // stop working the day this app updates.
+      return _profileFrom(payload, updatedAt: writtenAt);
     } catch (_) {
       return null;
     }
+  }
+
+  /// Step two: the utenza's playlist, shared by all of its devices.
+  ///
+  /// The date that matters is the **newest** of the two: the account blob moves
+  /// when the owner corrects the credentials (that is how a fix reaches
+  /// everybody), and the casellina moves when the device is hooked to a
+  /// different utenza — whose playlist may well be older than what this device
+  /// last applied, and would otherwise be ignored.
+  Future<ProvisionedProfile?> _fromAccount({
+    required String endpoint,
+    required String accountId,
+    required String accountCode,
+    required int casellinaAt,
+  }) async {
+    final envelope = await _envelope(accountUri(endpoint, accountId));
+    if (envelope == null) return null;
+    final payload = await decryptProvisioning(
+      envelope['data']?.toString() ?? '',
+      accountCode,
+    );
+    if (payload == null) return null;
+    final accountAt = (envelope['updatedAt'] as num?)?.toInt() ?? 0;
+
+    return _profileFrom(
+      payload,
+      updatedAt: accountAt > casellinaAt ? accountAt : casellinaAt,
+      // The utenza's code doubles as the sync code of its devices, so the same
+      // person's phone and TV line up on their own — but only when the owner
+      // asked for it: the server says so next to the playlist, because the
+      // switch can be flipped long after the playlist was written.
+      syncCode: (envelope['sync'] as num?)?.toInt() == 1 ? accountCode : null,
+    );
+  }
+
+  ProvisionedProfile? _profileFrom(
+    Map<String, dynamic> payload, {
+    required int updatedAt,
+    String? syncCode,
+  }) {
+    final host = payload['host']?.toString().trim() ?? '';
+    final username = payload['username']?.toString().trim() ?? '';
+    if (host.isEmpty || username.isEmpty) return null;
+    final name = payload['name']?.toString().trim() ?? '';
+    return ProvisionedProfile(
+      name: name.isEmpty ? 'Playlist' : name,
+      host: host,
+      username: username,
+      password: payload['password']?.toString() ?? '',
+      updatedAt: updatedAt,
+      syncCode: syncCode ??
+          normalizeSyncCode(payload['syncCode']?.toString() ?? ''),
+    );
+  }
+
+  /// A `{data, updatedAt}` envelope from the Worker, or null when there is
+  /// nothing to read. 404 (nothing waiting) and 403 (the code isn't in the
+  /// panel) are both "no playlist", not failures.
+  Future<Map<String, dynamic>?> _envelope(Uri uri) async {
+    final resp = await _dio.getUri<String>(
+      uri,
+      options: Options(
+        responseType: ResponseType.plain,
+        validateStatus: (s) => s == 200 || s == 404 || s == 403,
+        headers: const {'Cache-Control': 'no-cache'},
+      ),
+    );
+    if (resp.statusCode != 200) return null;
+    final decoded = jsonDecode(resp.data ?? '');
+    return decoded is Map ? decoded.cast<String, dynamic>() : null;
   }
 }
