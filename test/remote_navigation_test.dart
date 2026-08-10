@@ -323,11 +323,11 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
     await tester.pumpAndSettle();
 
-    // Arrival: "Aggiungi playlist" is the autofocused starting point (no
-    // playlists saved in this harness). Down: the aspect chip row (Originale /
-    // Riempi). A couple of rights clamp on the last chip ("Riempi").
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pumpAndSettle();
+    // Arrival: dal 72° giro le sezioni playlist, codice e sincronizzazione
+    // sono di sola lettura, quindi il PRIMO elemento premibile — e il punto
+    // d'atterraggio del telecomando — è la chip "Originale" (su questo host
+    // non-Android la sezione "Modalità dispositivo" non esiste). Un paio di
+    // frecce a destra si fermano sull'ultima chip, "Riempi".
     for (var i = 0; i < 2; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
@@ -345,11 +345,12 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
     await tester.pumpAndSettle();
 
-    // From "Aggiungi playlist": down through the aspect chips and the
-    // subtitles switch, onto the skip row. Those rows start below the fold,
-    // so each focus hop auto-scrolls (ensureVisible) — exactly how a real
-    // remote reaches them. Rights clamp on the last chip ("60 s").
-    await _pressDown(tester, 3);
+    // Si parte dalle chip del rapporto d'aspetto (vedi sopra): giù
+    // sull'interruttore dei sottotitoli, giù ancora sulle chip del salto.
+    // Quelle righe stanno sotto la piega, quindi ogni salto del focus fa
+    // scorrere la lista (ensureVisible) — esattamente come col telecomando
+    // vero. Le frecce a destra si fermano sull'ultima chip, "60 s".
+    await _pressDown(tester, 2);
     for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();

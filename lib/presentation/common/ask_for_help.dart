@@ -26,35 +26,51 @@ class AskForHelpWithCode extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Non riesci a compilarla da solo?',
+            'La playlist te la mette chi ti ha dato questa applicazione.',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 6),
           const Text(
-            'Chiedi a chi ti ha dato questa applicazione e leggigli questo '
-            'codice: la playlist arriva da sola, senza toccare niente.',
+            'Leggigli questo codice: arriva da sola, senza toccare niente.',
             style: TextStyle(color: Colors.white70, height: 1.4),
           ),
           const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white24),
-            ),
-            child: Text(
-              DeviceCode.grouped(code),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 26,
-                letterSpacing: 3,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          DeviceCodeBox(code: code),
         ],
+      ),
+    );
+  }
+}
+
+/// The code itself, in a box big enough to read out over the phone.
+///
+/// Plain text, never a focusable: it is shown on the setup screen **and** in
+/// Impostazioni, and in both places it is something you read aloud, not
+/// something you press.
+class DeviceCodeBox extends StatelessWidget {
+  const DeviceCodeBox({super.key, required this.code, this.fontSize = 26});
+
+  final String code;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        DeviceCode.grouped(code),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: fontSize,
+          letterSpacing: 3,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

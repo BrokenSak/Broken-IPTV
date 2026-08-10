@@ -13,7 +13,6 @@ import 'package:broken_iptv/data/models/download_item.dart';
 import 'package:broken_iptv/data/models/series_item.dart';
 import 'package:broken_iptv/data/models/vod_item.dart';
 import 'package:broken_iptv/data/models/xtream_category.dart';
-import 'package:broken_iptv/data/models/xtream_profile.dart';
 import 'package:broken_iptv/data/repositories/series_repository.dart';
 import 'package:broken_iptv/data/repositories/vod_repository.dart';
 import 'package:broken_iptv/data/services/device_mode_service.dart';
@@ -24,11 +23,9 @@ import 'package:broken_iptv/presentation/common/tv_text_field.dart';
 import 'package:broken_iptv/presentation/screens/downloads/downloads_screen.dart';
 import 'package:broken_iptv/presentation/screens/home/home_screen.dart';
 import 'package:broken_iptv/presentation/screens/onboarding/device_mode_screen.dart';
-import 'package:broken_iptv/presentation/screens/profiles/add_profile_screen.dart';
 import 'package:broken_iptv/presentation/screens/profiles/profiles_screen.dart';
 import 'package:broken_iptv/presentation/screens/series/series_detail_screen.dart';
 import 'package:broken_iptv/presentation/screens/settings/settings_screen.dart';
-import 'package:broken_iptv/presentation/screens/settings/sync_settings_screen.dart';
 import 'package:broken_iptv/presentation/screens/vod/vod_detail_screen.dart';
 import 'package:broken_iptv/state/series_providers.dart';
 import 'package:broken_iptv/state/update_providers.dart';
@@ -135,10 +132,8 @@ Widget _shell(Widget screen) {
         '/series',
         '/search',
         '/settings',
-        '/settings/sync',
         '/downloads',
         '/profiles',
-        '/profiles/add',
         '/vod/:id',
         '/series/:id',
       ])
@@ -280,39 +275,14 @@ void main() {
     await _auditScreen(tester, const SettingsScreen(), name: 'Impostazioni');
   });
 
-  testWidgets('sincronizzazione', (tester) async {
-    // ⚠️ This used to pass `expectAutofocus: false` with a comment claiming the
-    // screen "opens on a text field wrapper". It did not: on the Firestick it
-    // opened with NOTHING focused — OK did nothing and the first arrow jumped
-    // up to the back button. The exemption hid it, so the assertion is on now
-    // (the first field asks for navigation focus).
-    await _auditScreen(tester, const SyncSettingsScreen(),
-        name: 'Sincronizzazione');
-  });
-
-  testWidgets('playlist: vuota e con una playlist salvata', (tester) async {
-    await _auditScreen(tester, const ProfilesScreen(), name: 'Playlist (vuota)');
-
-    // With a saved playlist the screen grows the FAB + edit/delete icons: the
-    // FAB used to be a bare (invisible on TV) focus stop.
-    // NB: Hive writes MUST run inside runAsync — awaiting real IO under the
-    // widget-test fake clock never resumes (HANDOFF lesson, hit again here).
-    await tester.runAsync(() => StorageService.profilesBox.put('p1', const XtreamProfile(
-          id: 'p1',
-          name: 'Casa',
-          host: 'http://fake-host',
-          username: 'u',
-        ).toMap()));
-    addTearDown(() => StorageService.profilesBox.clear());
-
-    await _auditScreen(tester, const ProfilesScreen(), name: 'Playlist (piena)');
-  });
-
-  testWidgets('aggiungi playlist (campi + salva)', (tester) async {
-    await _auditScreen(tester, const AddProfileScreen(),
-        name: 'Aggiungi playlist',
-        // Lands on the first text field's navigation wrapper.
-        expectAutofocus: false);
+  testWidgets('schermata di attesa della playlist', (tester) async {
+    // Dal 72° giro qui NON c'è niente da premere: la playlist è una sola e la
+    // manda il proprietario dal pannello, quindi la schermata mostra il codice
+    // e aspetta. `expectAutofocus: false` è quindi corretto — ma l'audit degli
+    // stop invisibili resta, perché il difetto da prendere è il contrario:
+    // qualcosa che prende il fuoco senza disegnare niente.
+    await _auditScreen(tester, const ProfilesScreen(),
+        name: 'Attesa playlist', expectAutofocus: false);
   });
 
   testWidgets('dettaglio film', (tester) async {

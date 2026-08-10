@@ -33,45 +33,48 @@ class FakeSecureCredentialsService extends SecureCredentialsService {
   }
 }
 
+/// Avvio dell'app su un dispositivo senza playlist.
+///
+/// ⚠️ Dal 72° giro non esiste più un modulo per aggiungerla: la playlist è una
+/// sola e la manda il proprietario dal pannello. Questo test difende ciò che
+/// resta: chi è senza playlist **vede il codice da dettare** e non un pulsante
+/// che non deve più esistere. La consegna vera è in `provisioning_apply_test`,
+/// e l'ingresso nell'app con una playlist in `remote_navigation_test` (che usa
+/// repo finti: far partire la home vera qui significherebbe chiamate di rete
+/// coi timer appesi sotto il finto orologio).
 void main() {
   setUpAll(() async {
     final dir = Directory.systemTemp.createTempSync('broken_iptv_test');
     await StorageService.init(testPath: dir.path);
   });
 
-  testWidgets('Adding the first profile lands on the home screen', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
+  // ⚠️ Niente pulizia di Hive nei teardown: `await box.clear()` fuori da
+  // `tester.runAsync` è IO vero sotto il finto orologio e non torna MAI (il
+  // test resta appeso finché non scade — ci sono ricascato scrivendo questo).
+  // La cartella temporanea muore col file.
+  Widget app() => ProviderScope(
         overrides: [
-          secureCredentialsServiceProvider.overrideWithValue(FakeSecureCredentialsService()),
+          secureCredentialsServiceProvider
+              .overrideWithValue(FakeSecureCredentialsService()),
           // The home checks for updates (PackageInfo + network) — pin it off so
           // the test never touches a platform channel or the network.
           updateCheckProvider.overrideWith((ref) async => null),
         ],
         child: const BrokenIptvApp(),
-      ),
-    );
+      );
+
+  testWidgets('senza playlist: si aspetta, e si vede il codice da dettare',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.text('Nessuna playlist'), findsOneWidget);
+    // Il codice è mostrato a gruppi di quattro: è quello che la persona legge
+    // al telefono a chi le configura l'app.
+    expect(find.textContaining(RegExp(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')),
+        findsOneWidget);
 
-    await tester.tap(find.text('Aggiungi playlist'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.widgetWithText(TextFormField, 'Nome Playlist'), 'Test Provider');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Username'), 'utente1');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'segreta');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Link'), 'server.example.com:8080');
-
-    await tester.runAsync(() async {
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Salva'));
-      await Future.delayed(const Duration(milliseconds: 300));
-    });
-    await tester.pumpAndSettle();
-
-    // First saved playlist selects itself and enters the app directly.
-    expect(find.text('TV'), findsOneWidget);
-    expect(find.text('Serie'), findsOneWidget);
-    expect(find.text('Film'), findsOneWidget);
+    // Nessun modo di aggiungerne una a mano: è il punto della schermata.
+    expect(find.text('Aggiungi playlist'), findsNothing);
   });
 }

@@ -85,9 +85,20 @@ Future<bool> _apply(Ref ref) async {
 
   // A shared code means "these devices are the same person's": adopting it is
   // what makes their favourites line up without anyone typing it twice.
+  //
+  // ⚠️ E l'interruttore dell'utenza decide anche il contrario: se il
+  // proprietario spegne i preferiti condivisi, il dispositivo deve SMETTERE.
+  // Senza questo resterebbe con un codice che il server rifiuta (403
+  // sync_disabled) e mostrerebbe un errore per una cosa che nessuno ha
+  // chiesto — e dal 72° giro nell'app non c'è più modo di togliersi quel
+  // codice a mano. Vale solo per le utenze: in un invio vecchio l'assenza del
+  // codice non vuol dire "spento", vuol dire "non pervenuto".
   final syncCode = remote.syncCode;
-  if (syncCode != null && syncCode != ref.read(syncProvider).code) {
+  final sync = ref.read(syncProvider);
+  if (syncCode != null && syncCode != sync.code) {
     ref.read(syncProvider.notifier).setCode(syncCode);
+  } else if (syncCode == null && remote.fromAccount && sync.code != null) {
+    ref.read(syncProvider.notifier).disable();
   }
 
   await prefs.put(_appliedAtKey, remote.updatedAt);

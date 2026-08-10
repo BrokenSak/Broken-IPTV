@@ -34,6 +34,7 @@ ProvisionedProfile _profile({
   String host = 'http://esempio.tv:8080',
   String name = 'Casa',
   String? syncCode,
+  bool fromAccount = false,
 }) =>
     ProvisionedProfile(
       name: name,
@@ -42,6 +43,7 @@ ProvisionedProfile _profile({
       password: 'segreta',
       updatedAt: updatedAt,
       syncCode: syncCode,
+      fromAccount: fromAccount,
     );
 
 void main() {
@@ -131,6 +133,41 @@ void main() {
     await container.read(provisioningProvider.notifier).checkAndApply();
 
     expect(container.read(syncProvider).code, isNull);
+  });
+
+  test('se l utenza spegne i preferiti condivisi il dispositivo smette',
+      () async {
+    // Il pannello è l'unico interruttore: nell'app non si può più togliere un
+    // codice a mano, quindi se restasse qui il dispositivo continuerebbe a
+    // bussare a un blob che il server rifiuta (403 sync_disabled) e mostrerebbe
+    // un errore per una cosa che nessuno ha chiesto.
+    final service = _FakeProvisioning(
+      _profile(syncCode: 'MNPQRSTUVWXY', fromAccount: true),
+    );
+    final container = containerWith(service);
+    await container.read(provisioningProvider.notifier).checkAndApply();
+    expect(container.read(syncProvider).code, 'MNPQRSTUVWXY');
+
+    // Stessa utenza, interruttore spento e playlist ri-salvata dal pannello.
+    service.answer = _profile(updatedAt: 2000, fromAccount: true);
+    await container.read(provisioningProvider.notifier).checkAndApply();
+
+    expect(container.read(syncProvider).code, isNull);
+  });
+
+  test('un invio vecchio senza codice non spegne una sincronizzazione già attiva',
+      () async {
+    // Nel formato pre-utenze l'assenza del codice vuol dire "non pervenuto",
+    // non "spento": un dispositivo configurato allora poteva avere un codice
+    // messo a mano.
+    final service = _FakeProvisioning(_profile(syncCode: 'MNPQRSTUVWXY'));
+    final container = containerWith(service);
+    await container.read(provisioningProvider.notifier).checkAndApply();
+
+    service.answer = _profile(updatedAt: 2000);
+    await container.read(provisioningProvider.notifier).checkAndApply();
+
+    expect(container.read(syncProvider).code, 'MNPQRSTUVWXY');
   });
 
   test('niente in attesa: non tocca nulla', () async {

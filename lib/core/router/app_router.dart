@@ -3,13 +3,11 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/models/xtream_profile.dart';
 import '../../data/services/storage_service.dart';
 import '../../presentation/common/app_background.dart';
 import '../../presentation/common/dpad_focus_guard.dart';
 import '../../presentation/screens/onboarding/device_mode_screen.dart';
 import '../../presentation/screens/profiles/profiles_screen.dart';
-import '../../presentation/screens/profiles/add_profile_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
 import '../../presentation/screens/live_tv/live_tv_screen.dart';
 import '../../presentation/screens/vod/vod_screen.dart';
@@ -19,7 +17,6 @@ import '../../presentation/screens/series/series_detail_screen.dart';
 import '../../presentation/screens/player/player_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
 import '../../presentation/screens/settings/settings_screen.dart';
-import '../../presentation/screens/settings/sync_settings_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
 
 /// Startup routing: on Android the very first launch goes through the
@@ -35,7 +32,6 @@ String? _rootRedirect(BuildContext context, GoRouterState state) {
   }
   if (StorageService.profilesBox.isEmpty &&
       loc != '/profiles' &&
-      loc != '/profiles/add' &&
       loc != '/device-mode') {
     return '/profiles';
   }
@@ -60,14 +56,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/profiles',
       builder: (context, state) => _bg(const ProfilesScreen()),
-      routes: [
-        GoRoute(
-          path: 'add',
-          builder: (context, state) => _bg(AddProfileScreen(
-            existingProfile: state.extra as XtreamProfile?,
-          )),
-        ),
-      ],
     ),
     GoRoute(
       path: '/home',
@@ -123,10 +111,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => _bg(const SettingsScreen()),
-    ),
-    GoRoute(
-      path: '/settings/sync',
-      builder: (context, state) => _bg(const SyncSettingsScreen()),
     ),
     GoRoute(
       path: '/downloads',

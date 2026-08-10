@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -16,12 +15,13 @@ import '../../../state/favorites_providers.dart';
 import '../../../state/live_providers.dart';
 import '../../../state/player_settings_providers.dart';
 import '../../../state/profile_providers.dart';
+import '../../../state/provisioning_providers.dart';
 import '../../../state/series_providers.dart';
 import '../../../state/sync_providers.dart';
 import '../../../state/vod_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/app_dialogs.dart';
-import '../../common/icon_action.dart';
+import '../../common/ask_for_help.dart';
 import '../../common/tv_focusable.dart';
 
 // Shared text styles for settings: **bold** titles, *italic* descriptions.
@@ -99,22 +99,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _confirmDeletePlaylist(XtreamProfile profile) async {
-    final ok = await showAppConfirmDialog(
-      context,
-      title: 'Eliminare playlist?',
-      message: '"${profile.name}" verrà rimossa insieme alle credenziali salvate.',
-      confirmLabel: 'Elimina',
-    );
-    if (ok) {
-      await ref.read(profilesProvider.notifier).remove(profile.id);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final profiles = ref.watch(profilesProvider);
     final selectedId = ref.watch(selectedProfileIdProvider);
+    final active = profiles.where((p) => p.id == selectedId).firstOrNull ??
+        (profiles.isEmpty ? null : profiles.first);
 
     return Scaffold(
       appBar: AppBar(
@@ -127,40 +117,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           const Text('Playlist', style: _kSectionTitle),
           const SizedBox(height: 8),
-          // Each playlist shows only its name; the selected one is filled white
-          // like the other setting chips. Edit/delete sit beside that box, on
-          // the page background (see _PlaylistTile).
-          // D-pad: the first item autofocuses, so entering Settings on TV
-          // always has a visibly focused starting point.
-          ...profiles.asMap().entries.map((e) => _PlaylistTile(
-                profile: e.value,
-                autofocus: e.key == 0,
-                selected: e.value.id == selectedId,
-                onSelect: () =>
-                    ref.read(selectedProfileIdProvider.notifier).select(e.value.id),
-                onEdit: () => context.push('/profiles/add', extra: e.value),
-                onDelete: () => _confirmDeletePlaylist(e.value),
-              )),
-          const SizedBox(height: 4),
-          TvFocusable(
-            borderRadius: 14,
-            autofocus: profiles.isEmpty,
-            onTap: () => context.push('/profiles/add'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.glassBorder),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.add, color: AppColors.textPrimary),
-                  SizedBox(width: 12),
-                  Text('Aggiungi playlist', style: _kItemTitle),
-                ],
-              ),
-            ),
+          // ⚠️ Read-only, and there is exactly one (72° giro, richiesta
+          // dell'utente): la playlist è quella che il proprietario manda dal
+          // pannello. Niente aggiungi/modifica/elimina, e nessun elenco da cui
+          // scegliere — quindi qui dentro non c'è un solo elemento focusabile.
+          _PlaylistSummary(profile: active),
+          const SizedBox(height: 24),
+          // Sempre visibile, così chi ha l'app può leggerlo a chi gliela
+          // sistema dal pannello — senza dover cancellare la playlist per
+          // tornare alla schermata che lo mostrava.
+          const Text('Codice del dispositivo', style: _kSectionTitle),
+          const SizedBox(height: 8),
+          DeviceCodeBox(code: ref.watch(deviceCodeProvider), fontSize: 22),
+          const SizedBox(height: 8),
+          const Text(
+            'Leggilo a chi ti ha dato l\'applicazione: da lì sistema la '
+            'playlist e il resto, senza che tu tocchi niente.',
+            style: _kItemDesc,
           ),
           const SizedBox(height: 24),
           const Text('Account', style: _kSectionTitle),
@@ -174,6 +147,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Expanded(
                   child: TvFocusable(
+                    // Primo elemento davvero premibile della schermata: senza
+                    // un autofocus qui, arrivando in Impostazioni col
+                    // telecomando non ci sarebbe nulla di selezionato e OK non
+                    // farebbe niente (59°/65° giro). Le sezioni sopra —
+                    // playlist e codice — sono sola lettura.
+                    autofocus: true,
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
                   ),
@@ -201,6 +180,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
+                    // Su Windows la sezione "Modalità dispositivo" non c'è, e
+                    // il primo premibile è questo.
+                    autofocus: !Platform.isAndroid && aspect == VideoAspect.values.first,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setAspect(aspect),
                     child: _ModeChip(
                       label: aspect.label,
@@ -284,84 +266,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
-class _PlaylistTile extends StatelessWidget {
-  const _PlaylistTile({
-    required this.profile,
-    required this.selected,
-    required this.onSelect,
-    required this.onEdit,
-    required this.onDelete,
-    this.autofocus = false,
-  });
+/// La playlist attiva, in sola lettura.
+///
+/// ⚠️ Niente `TvFocusable`, niente `ListTile`: non c'è niente da premere, e un
+/// ink Material qui sarebbe una fermata cieca del D-pad (vedi [_SettingLabel]).
+/// Mostra anche indirizzo e utente, che prima si vedevano solo entrando in
+/// Modifica: ora che Modifica non esiste più, è l'unico posto dove leggerli per
+/// dire a chi ti configura l'app cosa sta usando questo dispositivo.
+class _PlaylistSummary extends StatelessWidget {
+  const _PlaylistSummary({required this.profile});
 
-  final XtreamProfile profile;
-  final bool selected;
-  final VoidCallback onSelect;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final bool autofocus;
+  final XtreamProfile? profile;
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? Colors.black : AppColors.textPrimary;
-    // Three side-by-side focus stops — select · modifica · elimina — instead of
-    // the edit/delete buttons nested INSIDE the select area. A TV remote can't
-    // move focus into a button that sits within the currently-focused node
-    // (the D-pad found nothing to the "right" inside the tile), so with the old
-    // layout modifica/elimina were unreachable by remote. As siblings the D-pad
-    // steps left/right between them, each with its own focus ring.
-    //
-    // ⚠️ The white surface is on the SELECT stop, not on the whole row. It used
-    // to be the row: the ring then framed only the name portion and came out
-    // visibly smaller than the box it was highlighting (reported — "il quadrato
-    // dell'highlight della playlist è più piccolo del quadrato stesso"). Do NOT
-    // "fix" that by insetting the three stops inside a row-wide card instead:
-    // that was tried and reverted, because the ring lands *on* the card and the
-    // selected card is WHITE — a white ring on white, invisible. Keeping
-    // modifica/elimina off the fill leaves every ring on the dark page
-    // background, and makes the highlighted rectangle the white surface itself.
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    final p = profile;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
       child: Row(
         children: [
+          Icon(
+            p == null ? Icons.playlist_remove : Icons.playlist_play,
+            color: p == null ? AppColors.textSecondary : AppColors.accent,
+          ),
+          const SizedBox(width: 12),
           Expanded(
-            child: TvFocusable(
-              borderRadius: 14,
-              autofocus: autofocus,
-              onTap: onSelect,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white : Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.glassBorder),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(p?.name ?? 'Nessuna playlist', style: _kItemTitle),
+                const SizedBox(height: 2),
+                Text(
+                  p == null
+                      ? 'La mette chi ti ha dato l\'applicazione: leggigli il codice qui sotto.'
+                      : '${p.username}@${p.host}',
+                  style: _kItemDesc,
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.playlist_play, color: selected ? Colors.black : AppColors.accent),
-                    const SizedBox(width: 12),
-                    // Only the name is shown here — host/username appear only in Edit.
-                    Expanded(
-                      child: Text(
-                        profile.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ),
           ),
-          // Room for the select ring, which stands 6px outside its box.
-          const SizedBox(width: 6),
-          // On the page background now, never on the white fill: one colour,
-          // and no black-on-black when the playlist is the selected one.
-          IconAction(
-              icon: Icons.edit_outlined, onTap: onEdit, tooltip: 'Modifica'),
-          IconAction(
-              icon: Icons.delete_outline, onTap: onDelete, tooltip: 'Elimina'),
         ],
       ),
     );
@@ -500,9 +450,18 @@ class _AccountSection extends ConsumerWidget {
   }
 }
 
-/// Summary of the sync state. Everything editable lives behind "modifica"
-/// (see SyncSettingsScreen) — same shape as the playlists above, so a working
-/// sync code can't be changed by a stray tap while scrolling settings.
+/// Lo stato della sincronizzazione, in **sola lettura**.
+///
+/// ⚠️ Dal 72° giro qui non si configura più niente (richiesta dell'utente):
+/// niente codice da digitare, niente indirizzo, niente "genera codice", niente
+/// "sincronizza ora". Il motivo è che la sincronizzazione **si accende dal
+/// pannello del proprietario** e costa: ogni dispositivo che la usa scrive sul
+/// servizio. Un dispositivo che potesse accendersela da solo aggirerebbe
+/// l'interruttore dell'utenza — e chi la trovava spenta finiva a smanettare su
+/// un codice che non doveva toccare.
+///
+/// Niente elementi focusabili: non c'è nulla da premere, e un ink Material
+/// sarebbe una fermata cieca del D-pad (vedi [_SettingLabel]).
 class _SyncSection extends ConsumerWidget {
   const _SyncSection();
 
@@ -516,91 +475,57 @@ class _SyncSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sync = ref.watch(syncProvider);
 
-    final String subtitle;
+    final String detail;
     if (!sync.enabled) {
-      subtitle = 'Non attiva su questo dispositivo';
+      detail = 'Non attiva su questo dispositivo.';
     } else if (sync.lastSyncAt != null) {
-      subtitle = 'Ultima sincronizzazione ${_fmtWhen(sync.lastSyncAt!)}';
+      detail = 'Attiva · ultimo aggiornamento ${_fmtWhen(sync.lastSyncAt!)}.';
     } else {
-      subtitle = 'Mai sincronizzata';
+      detail = 'Attiva · nessun aggiornamento ancora.';
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TvFocusable(
-          borderRadius: 14,
-          onTap: () => context.push('/settings/sync'),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.glassBorder),
-            ),
-            child: Row(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            sync.enabled ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+            color: sync.enabled ? AppColors.accent : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  sync.enabled ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                  color: sync.enabled ? AppColors.accent : AppColors.textSecondary,
+                Text(sync.enabled ? 'Attiva' : 'Non attiva', style: _kItemTitle),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tiene uguali i preferiti e "Continua a guardare" su tutti i '
+                  'dispositivi della stessa persona: quello che guardi in salotto '
+                  'lo ritrovi al punto giusto sul telefono.',
+                  style: _kItemDesc,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 10),
-                      Text(
-                        // The code itself is the secret, so the summary shows
-                        // only whether there is one.
-                        sync.enabled ? 'Attiva' : 'Non attiva',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(subtitle, style: _kItemDesc),
-                      const SizedBox(height: 10),
-                    ],
-                  ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Ha un costo aggiuntivo, quindi si accende solo dal pannello di '
+                  'chi ti ha dato l\'applicazione: chiedila a lui.',
+                  style: _kItemDesc,
                 ),
-                // Same action as the tile itself (OK on the tile opens the
-                // sync settings): kept out of the focus traversal so it isn't
-                // a second, invisible D-pad stop nested inside the tile.
-                ExcludeFocus(
-                  child: IconButton(
-                    tooltip: 'Modifica',
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
-                    onPressed: () => context.push('/settings/sync'),
-                  ),
-                ),
+                const SizedBox(height: 6),
+                Text(detail, style: _kItemDesc),
               ],
             ),
           ),
-        ),
-        if (sync.enabled)
-          TvFocusable(
-            onTap: sync.running ? () {} : () => ref.read(syncProvider.notifier).syncNow(),
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: sync.running
-                  ? const SizedBox(
-                      width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_sync_outlined),
-              title: Text(
-                sync.running ? 'Sincronizzazione in corso...' : 'Sincronizza ora',
-                style: _kItemTitle,
-              ),
-              subtitle: Text(
-                sync.error ?? 'preferiti e "Continua a guardare" su tutti i dispositivi',
-                style: _kItemDesc,
-              ),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

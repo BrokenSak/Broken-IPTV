@@ -74,6 +74,7 @@ class ProvisionedProfile {
     required this.updatedAt,
     this.name = 'Playlist',
     this.syncCode,
+    this.fromAccount = false,
   });
 
   /// What the playlist is called in the app. The panel can set it; when it
@@ -92,6 +93,15 @@ class ProvisionedProfile {
   /// Set when the owner puts several devices of the same person together: the
   /// device adopts it as its sync code, so nobody has to type a code twice.
   final String? syncCode;
+
+  /// True when this came from an **utenza** (the two-step path), and therefore
+  /// [syncCode] is the whole truth about sharing: null there means the owner
+  /// turned sharing off, and the device must stop syncing.
+  ///
+  /// False for the old one-step payloads, where a missing code means "nothing
+  /// said" — a device configured before utenze existed may have had a code set
+  /// by hand, and silently switching it off would be a surprise.
+  final bool fromAccount;
 }
 
 /// Whether [remoteUpdatedAt] is worth applying over what was applied before.
@@ -227,6 +237,7 @@ class ProvisioningService {
       // asked for it: the server says so next to the playlist, because the
       // switch can be flipped long after the playlist was written.
       syncCode: (envelope['sync'] as num?)?.toInt() == 1 ? accountCode : null,
+      fromAccount: true,
     );
   }
 
@@ -234,6 +245,7 @@ class ProvisioningService {
     Map<String, dynamic> payload, {
     required int updatedAt,
     String? syncCode,
+    bool fromAccount = false,
   }) {
     final host = payload['host']?.toString().trim() ?? '';
     final username = payload['username']?.toString().trim() ?? '';
@@ -247,6 +259,7 @@ class ProvisioningService {
       updatedAt: updatedAt,
       syncCode: syncCode ??
           normalizeSyncCode(payload['syncCode']?.toString() ?? ''),
+      fromAccount: fromAccount,
     );
   }
 

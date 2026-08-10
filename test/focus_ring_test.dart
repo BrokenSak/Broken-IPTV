@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:broken_iptv/core/theme/app_theme.dart';
 import 'package:broken_iptv/core/ui_mode.dart';
-import 'package:broken_iptv/data/models/xtream_profile.dart';
 import 'package:broken_iptv/data/services/device_mode_service.dart';
 import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/presentation/common/tv_focusable.dart';
@@ -109,25 +108,18 @@ void main() {
         reason: 'no persistent ring on a phone — only touch feedback');
   });
 
-  testWidgets('playlist: the ring frames exactly the box it highlights',
+  testWidgets('la chip: l anello incornicia esattamente il riquadro che evidenzia',
       (tester) async {
-    // Reported: "il quadrato dell'highlight della playlist è più piccolo del
-    // quadrato stesso". The white surface was the whole ROW while the select
-    // stop covered only the name — modifica/elimina sat on the same fill — so
-    // the ring came out narrower than the thing it was supposed to frame.
+    // Segnalato al 64° giro sulla riga playlist ("il quadrato dell'highlight
+    // è più piccolo del quadrato stesso"): il riempimento bianco stava su tutta
+    // la riga mentre lo stop del focus copriva solo il nome, e l'anello usciva
+    // più stretto della cosa che doveva incorniciare.
+    //
+    // Dal 72° giro in Impostazioni la playlist è sola lettura e non ha più un
+    // anello: la stessa regola si misura ora sulle chip della modalità
+    // dispositivo, che sono la prima cosa premibile della schermata e hanno la
+    // stessa forma (superficie riempita dentro un TvFocusable).
     debugDeviceModeOverride = DeviceMode.tv;
-    // Hive writes go through runAsync: real IO never resumes under the widget
-    // tests' fake clock (a HANDOFF lesson, learned twice).
-    await tester.runAsync(() => StorageService.profilesBox.put(
-          'p1',
-          const XtreamProfile(
-            id: 'p1',
-            name: 'Casa',
-            host: 'http://fake-host',
-            username: 'u',
-          ).toMap(),
-        ));
-    addTearDown(() => StorageService.profilesBox.clear());
 
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
@@ -146,27 +138,28 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
     }
 
-    final selectStop =
-        find.ancestor(of: find.text('Casa'), matching: find.byType(TvFocusable));
-    expect(selectStop, findsOneWidget,
-        reason: 'the playlist name must sit in its own focus stop');
-    expect(Focus.of(tester.element(find.text('Casa'))).hasPrimaryFocus, isFalse,
-        reason: 'sanity: the text itself is not the focus node');
+    // La lista costruisce solo ciò che è a schermo: le chip stanno sotto la
+    // piega e senza questo non esistono nemmeno nell'albero.
+    final label = find.text('Originale');
+    await tester.scrollUntilVisible(label, 120,
+        scrollable: find.byType(Scrollable).first);
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
 
-    // The visible surface behind the name: its innermost filled ancestor.
-    // Deliberately searched from the TEXT outwards, not inside the focus stop —
-    // in the broken layout that surface was the whole row, an ANCESTOR of the
-    // stop, and this is what makes the mismatch measurable here.
+    final stop = find.ancestor(of: label, matching: find.byType(TvFocusable));
+    expect(stop, findsOneWidget, reason: 'la chip deve avere il suo stop');
+
     final surface = _decoratedRect(
       tester,
-      find.ancestor(of: find.text('Casa'), matching: find.byType(DecoratedBox)),
+      find.ancestor(of: label, matching: find.byType(DecoratedBox)),
       matches: (d) => d.color != null,
-      describe: 'the playlist surface',
+      describe: 'la superficie della chip',
       self: true,
     );
     final ring = _decoratedRect(
       tester,
-      selectStop,
+      stop,
       // The ring is border-only — no fill (a BoxShadow/fill would leak inside).
       matches: (d) => d.color == null && d.border != null,
       describe: 'the focus ring',

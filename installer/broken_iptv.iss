@@ -3,7 +3,7 @@
 ; No admin rights required; single interactive page; dark theme.
 
 #define MyAppName "Broken IPTV"
-#define MyAppVersion "1.10.2"
+#define MyAppVersion "1.11.0"
 #define MyAppPublisher "Broken IPTV"
 #define MyAppExeName "broken_iptv.exe"
 #define MyBuildDir "..\build\windows\x64\runner\Release"

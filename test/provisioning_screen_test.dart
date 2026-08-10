@@ -12,15 +12,14 @@ import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/presentation/common/tv_focusable.dart';
 import 'package:broken_iptv/presentation/screens/profiles/profiles_screen.dart';
 
-/// La via d'uscita per chi non sa compilare la playlist da solo: sulla PRIMA
-/// schermata (l'elenco vuoto) devono esserci la frase e il **codice** da
-/// leggere a chi gli ha dato l'app.
+/// La schermata di chi non ha (ancora) la playlist: deve mostrare la frase e
+/// il **codice** da leggere a chi gli ha dato l'app, e nient'altro.
 ///
-/// Sta lì e non dentro al modulo per due motivi trovati sul campo: chi non sa
-/// compilare la playlist non preme "Aggiungi playlist" per cercare aiuto, e
-/// nel modulo finiva sotto al pulsante Salva — testo non selezionabile, quindi
-/// col telecomando la lista non ci scendeva nemmeno ("è tagliata e non posso
-/// scendere"). In cima al modulo, invece, spingeva Salva fuori schermo.
+/// Dal 72° giro non c'è più nemmeno un modulo da compilare: la playlist è una
+/// sola e la manda il proprietario dal pannello. Prima il codice stava dentro
+/// quel modulo, sotto al pulsante Salva — testo non selezionabile, quindi col
+/// telecomando la lista non ci scendeva nemmeno ("è tagliata e non posso
+/// scendere") e chi era bloccato non lo vedeva.
 void main() {
   setUpAll(() async {
     final dir = Directory.systemTemp.createTempSync('broken_iptv_provisioning');
@@ -38,8 +37,8 @@ void main() {
     await tester.pumpWidget(emptyList());
     await tester.pump();
 
-    expect(find.textContaining('Non riesci a compilarla da solo'), findsOneWidget);
-    expect(find.textContaining('leggigli questo codice'), findsOneWidget);
+    expect(find.textContaining('te la mette chi ti ha dato'), findsOneWidget);
+    expect(find.textContaining('Leggigli questo codice'), findsOneWidget);
 
     final code = DeviceCode.read();
     expect(find.text(DeviceCode.grouped(code)), findsOneWidget);
@@ -69,8 +68,6 @@ void main() {
 
     final code = find.text(DeviceCode.grouped(DeviceCode.read()));
     expect(tester.getRect(code).bottom, lessThanOrEqualTo(720));
-    expect(tester.getRect(find.text('Aggiungi playlist')).bottom,
-        lessThanOrEqualTo(720));
   });
 
   testWidgets('ci sta anche su un telefono piccolo', (tester) async {
@@ -103,5 +100,15 @@ void main() {
       findsNothing,
       reason: 'nemmeno un ink Material: su Android sarebbe una fermata cieca',
     );
+  });
+
+  testWidgets('non c’è nessun modo di aggiungerla a mano', (tester) async {
+    // È la richiesta dell'utente del 72° giro: la playlist è una sola, quella
+    // che manda lui. Un pulsante qui rimetterebbe in piedi la seconda.
+    await tester.pumpWidget(emptyList());
+    await tester.pump();
+
+    expect(find.text('Aggiungi playlist'), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
   });
 }
