@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/xtream_profile.dart';
 import '../../../data/services/content_source.dart';
 import '../../../data/services/device_mode_service.dart';
+import '../../../data/services/provisioning_service.dart';
 import '../../../data/services/speed_test_service.dart';
 import '../../../data/services/storage_service.dart';
 import '../../../state/favorites_providers.dart';
@@ -21,7 +22,6 @@ import '../../../state/sync_providers.dart';
 import '../../../state/vod_providers.dart';
 import '../../../state/watch_progress_providers.dart';
 import '../../common/app_dialogs.dart';
-import '../../common/ask_for_help.dart';
 import '../../common/tv_focusable.dart';
 
 // Shared text styles for settings: **bold** titles, *italic* descriptions.
@@ -39,6 +39,13 @@ const _kItemDesc = TextStyle(
   color: AppColors.textSecondary,
   fontStyle: FontStyle.italic,
 );
+
+/// Gancio di test: la sezione "Modalità dispositivo" esiste solo su Android, e
+/// su un host Windows il layout vero della TV non si riprodurrebbe — quella
+/// sezione è proprio ciò che spinge giù il resto e fa uscire il codice dallo
+/// schermo. Senza questo, il test del codice visibile passava anche col layout
+/// rotto: cioè non serviva a niente.
+bool? debugAndroidSectionOverride;
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -112,9 +119,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         leading: tvBackButton(context),
         title: const Text('Impostazioni'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+      // ⚠️ Il codice del dispositivo sta FUORI dalla lista, in una barra che
+      // non scorre mai. Dentro non poteva stare: è testo, e col D-pad la lista
+      // scorre solo seguendo il focus — sceso una volta, il codice usciva dallo
+      // schermo e non rientrava più nemmeno risalendo (segnalato dall'utente; e
+      // il test lo riproduce: dopo il giro il widget non era nemmeno più
+      // costruito). Nessun ordine delle sezioni risolve: l'unica soluzione è
+      // non metterlo in una lista.
+      body: Column(
         children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
           const Text('Playlist', style: _kSectionTitle),
           const SizedBox(height: 8),
           // ⚠️ Read-only, and there is exactly one (72° giro, richiesta
@@ -122,24 +139,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // pannello. Niente aggiungi/modifica/elimina, e nessun elenco da cui
           // scegliere — quindi qui dentro non c'è un solo elemento focusabile.
           _PlaylistSummary(profile: active),
-          const SizedBox(height: 24),
-          // Sempre visibile, così chi ha l'app può leggerlo a chi gliela
-          // sistema dal pannello — senza dover cancellare la playlist per
-          // tornare alla schermata che lo mostrava.
-          const Text('Codice del dispositivo', style: _kSectionTitle),
-          const SizedBox(height: 8),
-          DeviceCodeBox(code: ref.watch(deviceCodeProvider), fontSize: 22),
-          const SizedBox(height: 8),
-          const Text(
-            'Leggilo a chi ti ha dato l\'applicazione: da lì sistema la '
-            'playlist e il resto, senza che tu tocchi niente.',
-            style: _kItemDesc,
-          ),
-          const SizedBox(height: 24),
-          const Text('Account', style: _kSectionTitle),
-          const SizedBox(height: 8),
-          const _AccountSection(),
-          if (Platform.isAndroid) ...[
+          if (debugAndroidSectionOverride ?? Platform.isAndroid) ...[
             const SizedBox(height: 24),
             const Text('Modalità dispositivo', style: _kSectionTitle),
             const SizedBox(height: 8),
@@ -147,11 +147,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Expanded(
                   child: TvFocusable(
-                    // Primo elemento davvero premibile della schermata: senza
-                    // un autofocus qui, arrivando in Impostazioni col
-                    // telecomando non ci sarebbe nulla di selezionato e OK non
-                    // farebbe niente (59°/65° giro). Le sezioni sopra —
-                    // playlist e codice — sono sola lettura.
+                    // ⚠️ Primo elemento premibile della schermata: è qui che
+                    // atterra il telecomando. Senza autofocus si aprirebbe con
+                    // nulla di selezionato e OK non farebbe niente (59°/65°
+                    // giro). Tutto ciò che gli sta sopra è sola lettura e viene
+                    // scorso via appena si scende: per questo il codice del
+                    // dispositivo NON sta qui dentro ma nella barra fissa in
+                    // fondo (vedi il commento sul body).
                     autofocus: true,
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
@@ -182,7 +184,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     borderRadius: 14,
                     // Su Windows la sezione "Modalità dispositivo" non c'è, e
                     // il primo premibile è questo.
-                    autofocus: !Platform.isAndroid && aspect == VideoAspect.values.first,
+                    autofocus: !(debugAndroidSectionOverride ?? Platform.isAndroid) &&
+                        aspect == VideoAspect.values.first,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setAspect(aspect),
                     child: _ModeChip(
                       label: aspect.label,
@@ -243,6 +246,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 8),
           const _SyncSection(),
           const SizedBox(height: 24),
+          // Sotto, non in mezzo: è informazione da leggere, non da raggiungere
+          // in fretta, e in cima rubava lo spazio al codice del dispositivo.
+          const Text('Account', style: _kSectionTitle),
+          const SizedBox(height: 8),
+          const _AccountSection(),
+          const SizedBox(height: 24),
           const Text('Rete', style: _kSectionTitle),
           const SizedBox(height: 8),
           const _SpeedTestTile(),
@@ -258,6 +267,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'elimina tutti i dati personali dell\'applicazione sul dispositivo',
                 style: _kItemDesc,
               ),
+            ),
+          ),
+              ],
+            ),
+          ),
+          _DeviceCodeBar(code: ref.watch(deviceCodeProvider)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Il codice del dispositivo, fisso in fondo a Impostazioni.
+///
+/// ⚠️ Fuori dalla lista di proposito: è testo, e col telecomando una lista
+/// scorre solo seguendo il focus — quello che esce dallo schermo non rientra.
+/// Qui invece è sempre a video, da qualunque punto delle impostazioni, che è
+/// esattamente ciò che serve quando qualcuno al telefono ti chiede "leggimi il
+/// codice". Non è focusabile: non c'è niente da premere.
+class _DeviceCodeBar extends StatelessWidget {
+  const _DeviceCodeBar({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+      decoration: const BoxDecoration(
+        color: Color(0xCC000000),
+        border: Border(top: BorderSide(color: AppColors.glassBorder)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tv_outlined, color: AppColors.textSecondary, size: 20),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Codice di questo dispositivo — leggilo a chi ti configura l\'app',
+              style: _kItemDesc,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            DeviceCode.grouped(code),
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 20,
+              letterSpacing: 2,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
             ),
           ),
         ],

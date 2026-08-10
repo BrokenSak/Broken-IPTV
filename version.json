@@ -1,7 +1,7 @@
 {
-  "build": 43,
-  "version": "1.11.0",
-  "notes": "La playlist è una sola e la mette chi ti ha dato l'applicazione, dal suo pannello: in Impostazioni ora vedi sempre il codice di questo dispositivo da leggergli, così può sistemarti tutto da lì. La sincronizzazione non si configura più a mano: si vede soltanto se è attiva, e si accende dal pannello perché ha un costo aggiuntivo.",
+  "build": 44,
+  "version": "1.11.1",
+  "notes": "Il codice del dispositivo ora sta in una barra fissa in fondo alle Impostazioni: prima era dentro l'elenco e col telecomando, una volta sceso, non si riusciva più a tornarci sopra.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }

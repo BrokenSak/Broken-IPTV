@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,6 +12,7 @@ import 'package:broken_iptv/data/services/provisioning_service.dart';
 import 'package:broken_iptv/data/services/storage_service.dart';
 import 'package:broken_iptv/presentation/common/tv_focusable.dart';
 import 'package:broken_iptv/presentation/screens/profiles/profiles_screen.dart';
+import 'package:broken_iptv/presentation/screens/settings/settings_screen.dart';
 
 /// La schermata di chi non ha (ancora) la playlist: deve mostrare la frase e
 /// il **codice** da leggere a chi gli ha dato l'app, e nient'altro.
@@ -110,5 +112,106 @@ void main() {
 
     expect(find.text('Aggiungi playlist'), findsNothing);
     expect(find.byType(ElevatedButton), findsNothing);
+  });
+
+  testWidgets('in Impostazioni il codice si vede ANCHE dopo l autofocus',
+      (tester) async {
+    // ⚠️ Segnalato dall'utente: col telecomando Impostazioni si apriva sul
+    // primo elemento premibile, la lista scorreva fino a lui e il codice — che
+    // gli sta sopra ed è testo — finiva fuori schermo. Col D-pad non esiste lo
+    // scorrimento libero: quello che esce non torna. Quindi non basta che il
+    // codice sia "in Impostazioni", deve essere **a schermo all'arrivo**.
+    // Il Firestick: 1920x1080 fisici con densità 2.0 = **960x540 logici**. Con
+    // 1280x720 logici ci stava tutto e il test passava anche col layout rotto:
+    // lo spazio vero è la metà.
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    // ⚠️ Senza questo il test MENTE: l'host è Windows, dove TvFocusable non
+    // chiede il focus, quindi non ci sarebbe autofocus, la lista non
+    // scorrerebbe e il codice risulterebbe visibile anche col layout rotto
+    // (verificato: col vecchio ordine il test passava lo stesso).
+    TvFocusable.debugDpadOverride = true;
+    addTearDown(() => TvFocusable.debugDpadOverride = null);
+    // E si finge Android, o la sezione "Modalità dispositivo" — quella che
+    // spinge giù tutto il resto — qui non esisterebbe nemmeno.
+    debugAndroidSectionOverride = true;
+    addTearDown(() => debugAndroidSectionOverride = null);
+
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: const SettingsScreen(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(navigationMode: NavigationMode.directional),
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
+    ));
+    // Pump limitato: la sezione Account tiene vivo uno spinner per sempre.
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    final code = find.text(DeviceCode.grouped(DeviceCode.read()));
+    expect(code, findsOneWidget);
+    final rect = tester.getRect(code);
+    expect(rect.top, greaterThanOrEqualTo(0.0),
+        reason: 'il codice è scorso sopra il bordo: irraggiungibile col D-pad');
+    expect(rect.bottom, lessThanOrEqualTo(540.0),
+        reason: 'il codice è sotto la piega: col D-pad non ci si arriva');
+  });
+
+  testWidgets('col telecomando si può tornare al codice dopo essere sceso',
+      (tester) async {
+    // ⚠️ Il caso vero segnalato dall'utente: non è l'arrivo, è il ritorno. Si
+    // scende fra le impostazioni, la lista scorre, il codice esce dallo
+    // schermo — ed è testo, quindi se risalendo non rientra è perso per sempre.
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    TvFocusable.debugDpadOverride = true;
+    addTearDown(() => TvFocusable.debugDpadOverride = null);
+    debugAndroidSectionOverride = true;
+    addTearDown(() => debugAndroidSectionOverride = null);
+
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: const SettingsScreen(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(navigationMode: NavigationMode.directional),
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
+    ));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    final code = find.text(DeviceCode.grouped(DeviceCode.read()));
+
+    // Giù fino in fondo alle impostazioni...
+    for (var i = 0; i < 8; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+    // ...e poi su, come farebbe chi vuole rileggere il codice.
+    for (var i = 0; i < 12; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    expect(code, findsOneWidget, reason: 'il codice non è nemmeno costruito');
+    final rect = tester.getRect(code);
+    expect(rect.top, greaterThanOrEqualTo(0.0),
+        reason: 'risalendo col D-pad il codice non rientra: irraggiungibile');
+    expect(rect.bottom, lessThanOrEqualTo(540.0),
+        reason: 'risalendo col D-pad il codice resta sotto la piega');
   });
 }
