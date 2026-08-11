@@ -10,14 +10,44 @@ import 'provisioning_providers.dart' show underFlutterTest;
 import 'series_providers.dart';
 import 'vod_providers.dart';
 
-final catalogRefreshingProvider = NotifierProvider<_RefreshingNotifier, bool>(
+/// A che punto è l'aggiornamento, per poterlo **mostrare**.
+///
+/// L'utente ha chiesto che l'aggiornamento a mano blocchi tutto: "se mi lasci
+/// la possibilità di continuare a fare cose l'app mi lagga". Con una sola
+/// connessione verso il pannello è vero — mentre scarichi i cataloghi, ogni
+/// altra cosa che l'app chiede si mette in coda dietro. Quindi si blocca, ma va
+/// detto perché: da qui esce il testo del riquadro.
+class CatalogRefreshState {
+  const CatalogRefreshState({
+    this.inCorso = false,
+    this.passo = 0,
+    this.totale = 0,
+    this.cosa = '',
+  });
+
+  final bool inCorso;
+  final int passo;
+  final int totale;
+
+  /// Cosa sta scaricando adesso, in italiano ("i film", "le serie"…).
+  final String cosa;
+}
+
+final catalogRefreshingProvider =
+    NotifierProvider<_RefreshingNotifier, CatalogRefreshState>(
   _RefreshingNotifier.new,
 );
 
-class _RefreshingNotifier extends Notifier<bool> {
+class _RefreshingNotifier extends Notifier<CatalogRefreshState> {
   @override
-  bool build() => false;
-  void set(bool v) => state = v;
+  CatalogRefreshState build() => const CatalogRefreshState();
+
+  void avvia(int totale) =>
+      state = CatalogRefreshState(inCorso: true, totale: totale, cosa: 'la lista');
+  void passo(int n, String cosa) =>
+      state = CatalogRefreshState(
+          inCorso: true, passo: n, totale: state.totale, cosa: cosa);
+  void fine() => state = const CatalogRefreshState();
 }
 
 /// Aggiornamento dei cataloghi, a mano o ogni 24 ore.
@@ -62,24 +92,27 @@ class CatalogRefresh {
       // (catalog_prefetch_test), che è anche più onesto.
       if (!underFlutterTest) {
         Future.microtask(() {
-          if (!_buttatoVia) refreshNow();
+          if (!_buttatoVia) refreshNow(inSottofondo: true);
         });
       }
     }
     // Then keep refreshing on a 24h cadence while the app runs.
     _timer?.cancel();
-    _timer = Timer.periodic(_interval, (_) => refreshNow());
+    _timer = Timer.periodic(_interval, (_) => refreshNow(inSottofondo: true));
   }
 
   void _markRefreshed() {
     StorageService.prefsBox.put(_lastKey, DateTime.now().millisecondsSinceEpoch);
   }
 
-  /// Rebuilds the session/catalog providers and forces a real re-fetch so we
-  /// actually know whether the playlist is reachable. Returns null on success
-  /// or a human-readable message when the refresh failed.
-  Future<String?> refreshNow() async {
-    _ref.read(catalogRefreshingProvider.notifier).set(true);
+  /// Rifa i cataloghi dal pannello. Torna null se è andata, oppure il motivo.
+  ///
+  /// [inSottofondo] distingue le due chiamate: quella automatica delle 24 ore
+  /// scende zitta e si ferma se è aperto un video; quella a mano invece
+  /// **blocca la schermata** finché non ha finito, e per farlo aspetta tutto.
+  Future<String?> refreshNow({bool inSottofondo = false}) async {
+    final avanzamento = _ref.read(catalogRefreshingProvider.notifier);
+    avanzamento.avvia(6);
     // Drop the profile's cached catalogs first: a manual/24h refresh must hit
     // the panel for real, not be answered by the disk cache.
     try {
@@ -97,8 +130,10 @@ class CatalogRefresh {
 
     String? error;
     try {
-      // Actually hit the panel so a failure (unreachable host, wrong
-      // credentials, connection limit) surfaces instead of silently "refreshing".
+      // La prima chiamata è anche la prova del nove: se il pannello non
+      // risponde (irraggiungibile, credenziali sbagliate, troppe connessioni)
+      // si scopre qui, non alla fine.
+      avanzamento.passo(1, 'le categorie TV');
       await _ref.read(liveCategoriesProvider.future);
     } on NoActivePlaylistException {
       // No playlist selected yet — nothing to refresh, not a failure to report.
@@ -106,12 +141,16 @@ class CatalogRefresh {
       error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
     }
 
-    _ref.read(catalogRefreshingProvider.notifier).set(false);
+    if (error == null) {
+      if (inSottofondo) {
+        // L'automatica non fa aspettare nessuno.
+        unawaited(_scaricaTutteLeListe().whenComplete(avanzamento.fine));
+        return null;
+      }
+      await _scaricaTutteLeListe(avanzamento: avanzamento);
+    }
 
-    // Il resto scende in sottofondo: chi ha premuto "Aggiorna lista" ha già
-    // la sua risposta (il pannello risponde o no), e può usare l'app mentre
-    // il grosso arriva.
-    if (error == null) unawaited(_scaricaTutteLeListe());
+    avanzamento.fine();
     return error;
   }
 
@@ -124,9 +163,12 @@ class CatalogRefresh {
   /// ⚠️ E si ferma se parte un video: con una connessione sola, scaricare
   /// mentre si guarda vuol dire schermo nero. Stessa regola del sync
   /// (`PlaybackActivity`), stesso motivo.
-  Future<void> _scaricaTutteLeListe() async {
-    Future<void> passo(Future<void> Function() scarica) async {
+  Future<void> _scaricaTutteLeListe({_RefreshingNotifier? avanzamento}) async {
+    var n = 1;
+    Future<void> passo(String cosa, Future<void> Function() scarica) async {
+      n++;
       if (PlaybackActivity.active || _buttatoVia) return;
+      avanzamento?.passo(n, cosa);
       try {
         await scarica();
       } catch (_) {
@@ -135,11 +177,11 @@ class CatalogRefresh {
       }
     }
 
-    await passo(() => _ref.read(allChannelsProvider.future));
-    await passo(() => _ref.read(vodCategoriesProvider.future));
-    await passo(() => _ref.read(allVodProvider.future));
-    await passo(() => _ref.read(seriesCategoriesProvider.future));
-    await passo(() => _ref.read(allSeriesProvider.future));
+    await passo('i canali', () => _ref.read(allChannelsProvider.future));
+    await passo('le categorie dei film', () => _ref.read(vodCategoriesProvider.future));
+    await passo('i film', () => _ref.read(allVodProvider.future));
+    await passo('le categorie delle serie', () => _ref.read(seriesCategoriesProvider.future));
+    await passo('le serie', () => _ref.read(allSeriesProvider.future));
   }
 
   void dispose() {

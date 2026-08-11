@@ -19,6 +19,7 @@ import '../../../state/vod_providers.dart' show vodCategoriesProvider;
 import '../../common/app_dialogs.dart';
 import '../../common/update_banner.dart';
 import '../../common/app_logo.dart';
+import '../../common/refresh_blocker.dart';
 import '../../common/tv_focusable.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -288,7 +289,17 @@ class _RefreshButtonState extends ConsumerState<_RefreshButton> {
   }
 
   Future<void> _doRefresh() async {
+    // ⚠️ Il riquadro copre la schermata per tutto l'aggiornamento, ed è
+    // voluto: con una sola connessione verso il pannello, continuare a
+    // navigare mentre scaricano i cataloghi fa accodare ogni richiesta e
+    // sembra che l'app si sia impuntata (segnalato: "mi lagga"). Meglio
+    // fermare tutto e dire perché.
+    unawaited(mostraAggiornamentoInCorso(context));
     final error = await ref.read(catalogRefreshProvider).refreshNow();
+    if (!mounted) return;
+    // Il riquadro non ha vie d'uscita: lo chiude solo questa riga, quando
+    // l'aggiornamento è finito (bene o male).
+    Navigator.of(context, rootNavigator: true).pop();
     if (!mounted) return;
     setState(() {
       _ok = error == null;
@@ -302,7 +313,7 @@ class _RefreshButtonState extends ConsumerState<_RefreshButton> {
 
   @override
   Widget build(BuildContext context) {
-    final refreshing = ref.watch(catalogRefreshingProvider);
+    final refreshing = ref.watch(catalogRefreshingProvider).inCorso;
     final label = refreshing ? 'Aggiornamento...' : (_result ?? 'Aggiorna lista');
     final Widget icon;
     if (refreshing) {

@@ -138,4 +138,30 @@ void main() {
     expect(a.vod.tutti, 0, reason: 'i film non devono partire durante un video');
     expect(a.serie.tutti, 0, reason: 'né le serie');
   });
+
+  test('l aggiornamento a mano ASPETTA: quando torna, ha gia scaricato tutto',
+      () async {
+    // È la condizione perché il riquadro che blocca la schermata abbia senso:
+    // se `refreshNow` tornasse subito lasciando il lavoro in sottofondo, il
+    // riquadro si chiuderebbe mentre l'app sta ancora scaricando — cioè
+    // esattamente il "mi lagga" segnalato dall'utente.
+    final a = ambiente();
+    await a.container.read(catalogRefreshProvider).refreshNow();
+
+    expect(a.vod.tutti, greaterThan(0), reason: 'i film prima di tornare');
+    expect(a.serie.tutti, greaterThan(0), reason: 'le serie prima di tornare');
+    expect(a.container.read(catalogRefreshingProvider).inCorso, isFalse,
+        reason: 'a fine corsa lo stato deve dire che non sta più aggiornando');
+  });
+
+  test('quella automatica invece non fa aspettare', () async {
+    // Se bloccasse anche quella delle 24 ore, l'app si inchioderebbe da sola
+    // all'avvio senza che nessuno abbia chiesto niente.
+    final a = ambiente();
+    await a.container.read(catalogRefreshProvider).refreshNow(inSottofondo: true);
+
+    expect(a.vod.tutti, 0, reason: 'torna prima di scaricare il resto');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(a.vod.tutti, greaterThan(0), reason: 'ma il resto arriva lo stesso');
+  });
 }
