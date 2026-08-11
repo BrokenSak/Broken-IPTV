@@ -1,0 +1,32 @@
+-- 80° giro: nel pannello, accanto a ogni dispositivo, si legge il **suo
+-- codice** — quello che l'app mostra in Impostazioni — invece delle prime
+-- dodici cifre dell'hash, che non somigliano a niente.
+--
+-- Perché serve: il codice è l'unica cosa che il proprietario e la persona
+-- all'altro capo del telefono hanno in comune ("mia madre mi chiama e io non
+-- riesco a riconoscere qual è il suo"). Il nome che scrivi nel pannello lo
+-- decidi tu e non c'è sul dispositivo; l'hash non si legge ad alta voce.
+--
+-- Come, senza buttare via il modello: `code_enc` è il codice **cifrato**
+-- (AES-GCM, chiave = SHA-256('broken-iptv-provision:proprietario:' +
+-- ADMIN_TOKEN)), cifrato e decifrato dal browser come già succede per le
+-- playlist delle utenze. Il Worker continua a tenere byte che non sa leggere,
+-- e la chiave di riga resta lo SHA-256 del codice.
+--
+-- ⚠️ Cosa cambia nel modello delle minacce: **niente per chi ha il token**
+-- (con quello ricavava già il codice di ogni utenza e leggeva ogni playlist:
+-- è il compromesso accettato al 70° giro) e **niente per un dump del D1**, che
+-- resta illeggibile. Cambia solo che il pannello si ricorda i codici invece di
+-- dimenticarli subito dopo averli usati.
+--
+-- ⚠️ I dispositivi registrati PRIMA di questo giro hanno `code_enc` NULL: il
+-- loro codice non esiste da nessuna parte e non si può recuperare. Il pannello
+-- lo dice ("codice non salvato") e offre di digitarlo una volta — verificando
+-- che l'hash coincida, quindi non ci si può sbagliare riga.
+--
+-- Va eseguita UNA VOLTA (D1 non ha ADD COLUMN IF NOT EXISTS: rilanciarla
+-- fallisce con "duplicate column name", ed è innocuo).
+--
+--   npx wrangler d1 execute broken-iptv-sync --remote --command "ALTER TABLE codes ADD COLUMN code_enc TEXT;"
+
+ALTER TABLE codes ADD COLUMN code_enc TEXT;

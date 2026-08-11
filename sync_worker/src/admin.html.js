@@ -129,6 +129,10 @@ export default `<!doctype html>
   .dev .who { flex: 1; min-width: 0; }
   .dev .name { font-size: 14px; }
   .dev .meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+  /* Il codice è la cosa che confronti al telefono: nella riga è l'unica scritta
+     accesa. (Prima lì c'era l'inizio dell'hash, che non somiglia a niente.) */
+  .dev .code { color: var(--text); font-weight: 600; letter-spacing: .08em; }
+  .dev .code.none { color: var(--muted); font-weight: 400; letter-spacing: 0; }
   /* The name is a field, but a row of fields reads as a form and this is a
      list. So it looks like text until you go near it. */
   .dev input[type=text] {
@@ -378,6 +382,18 @@ export default `<!doctype html>
 
   function newAccountId() {
     return hex(crypto.getRandomValues(new Uint8Array(16)));
+  }
+
+  /* Il segreto con cui questa pagina si ricorda i codici dei dispositivi.
+     Deriva dal token, come i codici delle utenze, e non somiglia a nessun
+     codice vero (quelli sono 12 simboli dell'alfabeto), quindi non può
+     collidere. Serve a una cosa sola: far leggere al proprietario, accanto al
+     dispositivo, lo stesso codice che la persona vede sulla sua TV. */
+  function ownerSecret() { return 'proprietario:' + token; }
+
+  /* Come lo stampa l'app: QAWD-9H4E-C2WJ. */
+  function grouped(code) {
+    return code.slice(0, 4) + '-' + code.slice(4, 8) + '-' + code.slice(8, 12);
   }
 
   function accountCode(accountId) {
@@ -690,14 +706,21 @@ export default `<!doctype html>
     link.addEventListener('click', function () {
       var code = pad.value();
       link.disabled = true;
+      var casellina;
       accountCode(account.id).then(function (shared) {
         return encrypt(code, JSON.stringify({
           account: shared, accountId: account.id, at: Date.now()
         }));
-      }).then(function (casellina) {
+      }).then(function (blob) {
+        casellina = blob;
+        /* E il codice, cifrato col segreto del proprietario: da qui in poi il
+           pannello sa dire QUALE dispositivo è, che è l'unica cosa che si
+           possa confrontare al telefono. */
+        return encrypt(ownerSecret(), JSON.stringify({ code: code }));
+      }).then(function (codeEnc) {
         return api('device', { method: 'POST', body: {
           code: code, accountId: account.id,
-          note: name.value.trim(), casellina: casellina
+          note: name.value.trim(), casellina: casellina, codeEnc: codeEnc
         } });
       }).then(function () {
         open = '';
@@ -829,7 +852,14 @@ export default `<!doctype html>
   }
 
   /* ---------- rows ---------- */
+  /* La riga porta il **codice del dispositivo**, quello che l'app mostra in
+     Impostazioni, perché è l'unica cosa che tu e la persona al telefono avete
+     in comune: il nome lo hai scelto tu e sul suo schermo non c'è, e l'hash
+     non si legge ad alta voce (era quello che si vedeva prima — "un codice a
+     caso", segnalato). Il codice arriva cifrato col segreto del proprietario e
+     si apre qui nel browser. */
   function deviceRow(device) {
+    var frag = document.createDocumentFragment();
     var row = el('div', 'dev');
     var who = el('div', 'who');
     var name = textInput(device.note || '', 'Senza nome');
@@ -839,9 +869,28 @@ export default `<!doctype html>
         .catch(function (e) { toast(e.message); });
     });
     who.appendChild(name);
-    who.appendChild(el('div', 'meta',
-      device.id.slice(0, 12) + ' · visto ' + ago(device.last_seen) +
-      (device.has_casellina ? '' : ' · senza casellina')));
+
+    var meta = el('div', 'meta');
+    var codeSpan = el('span', 'code');
+    var rest = ' · visto ' + ago(device.last_seen) +
+      (device.has_casellina ? '' : ' · senza casellina');
+    meta.appendChild(codeSpan);
+    meta.appendChild(el('span', null, rest));
+    who.appendChild(meta);
+
+    if (device.code_enc) {
+      codeSpan.textContent = '············';
+      decrypt(ownerSecret(), device.code_enc).then(function (payload) {
+        if (payload && payload.code) { codeSpan.textContent = grouped(payload.code); return; }
+        /* Token cambiato: i codici salvati con quello di prima non si aprono
+           più. Vale la stessa avvertenza delle utenze. */
+        codeSpan.className = 'code none';
+        codeSpan.textContent = 'codice illeggibile con questo token';
+      });
+    } else {
+      codeSpan.className = 'code none';
+      codeSpan.textContent = 'codice non salvato';
+    }
 
     var forget = el('button', 'ghost small', 'Rimuovi');
     forget.addEventListener('click', function () {
@@ -853,8 +902,76 @@ export default `<!doctype html>
     });
 
     row.appendChild(who);
+    if (!device.code_enc && open !== 'code:' + device.id) {
+      var ask = el('button', 'ghost small', 'Scrivi il codice');
+      ask.addEventListener('click', function () { open = 'code:' + device.id; render(); });
+      row.appendChild(ask);
+    }
     row.appendChild(forget);
-    return row;
+    frag.appendChild(row);
+    if (open === 'code:' + device.id) frag.appendChild(codeTeller(device));
+    return frag;
+  }
+
+  /* "Questo qual è?" — i dispositivi registrati prima dell'80° giro non hanno
+     il proprio codice nel pannello, e quel codice non è recuperabile da nessuna
+     parte (sul server c'è solo il suo hash, per costruzione): l'unico modo è
+     fartelo leggere una volta ancora.
+     Si verifica da sé, e non poteva essere altrimenti: l'hash di quello che
+     digiti deve venire l'id di QUESTA riga, se no stai guardando un altro
+     dispositivo. Non manda niente al dispositivo — la casellina non si tocca. */
+  function codeTeller(device) {
+    var box = el('div', 'editor');
+    var said = el('div', 'dial-said', 'Fattelo leggere dallo schermo del dispositivo.');
+    var save = el('button', null, 'Ricorda questo codice');
+    save.disabled = true;
+    var cancel = el('button', 'ghost', 'Annulla');
+
+    var pad = dial(function (code) {
+      save.disabled = true;
+      if (code.length !== 12) {
+        said.textContent = 'Fattelo leggere dallo schermo del dispositivo.';
+        return;
+      }
+      rowId(code).then(function (id) {
+        if (id !== device.id) {
+          said.textContent = 'Questo codice è di un altro dispositivo.';
+          return;
+        }
+        save.disabled = false;
+        said.textContent = 'È lui: ' + grouped(code) + '.';
+      });
+    });
+
+    save.addEventListener('click', function () {
+      save.disabled = true;
+      encrypt(ownerSecret(), JSON.stringify({ code: pad.value() }))
+        .then(function (codeEnc) {
+          return api('device-code', { method: 'POST', body: {
+            id: device.id, codeEnc: codeEnc
+          } });
+        })
+        .then(function () {
+          open = '';
+          toast('Codice ricordato');
+          return reload();
+        })
+        .catch(function (e) { save.disabled = false; toast(e.message); });
+    });
+    cancel.addEventListener('click', function () { open = ''; render(); });
+
+    box.appendChild(field('Codice di "' + (device.note || 'questo dispositivo') + '"', pad));
+    box.appendChild(said);
+    box.appendChild(el('p', 'note',
+      'Serve solo perché tu lo riconosca quando ti chiamano: al dispositivo non arriva ' +
+      'niente e la sua playlist non si tocca.'));
+    var actions = el('div', 'actions');
+    actions.appendChild(save);
+    actions.appendChild(cancel);
+    box.appendChild(actions);
+
+    setTimeout(function () { pad.focusField(); }, 0);
+    return box;
   }
 
   function accountCard(account) {

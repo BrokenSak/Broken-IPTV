@@ -18,10 +18,17 @@
  *   *      /v1/admin/...       -> what the panel calls (token-gated)
  *
  * There are no accounts to log into. A device's code IS its secret, so it is
- * never written to the database: rows are keyed by SHA-256(code), which means a
- * dump of the tables can't be used to read anyone's data back out. Merging
- * happens in the app (both devices run the same pure merge), so the server
- * never needs to understand the sync payload.
+ * never written to the database in the clear: rows are keyed by SHA-256(code),
+ * which means a dump of the tables can't be used to read anyone's data back
+ * out. Merging happens in the app (both devices run the same pure merge), so
+ * the server never needs to understand the sync payload.
+ *
+ * ⚠️ Since the 80th round `codes.code_enc` keeps the device's code **encrypted
+ * with a key derived from ADMIN_TOKEN**, so the panel can show it next to the
+ * device — without it the owner cannot tell whose installation is whose when
+ * somebody phones. It changes nothing for a database dump (still opaque) and
+ * nothing for whoever holds the token (they could already derive every
+ * utenza's code and read every playlist, see below).
  *
  * ⚠️ The playlists are the one place where that stops being absolute. An
  * utenza's code is **derived**, not stored: HMAC-SHA256(ADMIN_TOKEN, id), done
@@ -233,6 +240,7 @@ async function adminRoutes(request, env, url) {
       ).all(),
       env.DB.prepare(
         `SELECT c.id, c.note, c.account_id, c.sync_enabled, c.created_at, c.last_seen,
+                c.code_enc,
                 (SELECT 1 FROM blobs    b WHERE b.id = c.id) AS has_blob,
                 (SELECT 1 FROM profiles p WHERE p.id = c.id) AS has_casellina
            FROM codes c
@@ -303,17 +311,26 @@ async function adminRoutes(request, env, url) {
     }
     const casellina = (body.casellina ?? '').toString();
     if (!casellina || casellina.length > MAX_PROFILE_BYTES) return json({ error: 'bad_data' }, 400);
+    // Il codice cifrato col segreto del proprietario: è così che il pannello si
+    // ricorda di questo dispositivo e lo sa **nominare** al telefono. Cifrato
+    // dal browser — qui non arriva mai in chiaro (`code` sopra serve solo a
+    // calcolare l'hash di riga e non viene scritto da nessuna parte).
+    const codeEnc = (body.codeEnc ?? '').toString();
+    if (codeEnc.length > MAX_PROFILE_BYTES) return json({ error: 'bad_data' }, 400);
     const id = await rowId(code);
     const now = Date.now();
 
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO codes (id, note, sync_enabled, created_at, account_id, kind)
-              VALUES (?, ?, 0, ?, ?, 'device')
+        `INSERT INTO codes (id, note, sync_enabled, created_at, account_id, kind, code_enc)
+              VALUES (?, ?, 0, ?, ?, 'device', ?)
          ON CONFLICT(id) DO UPDATE SET note = excluded.note,
                                        account_id = excluded.account_id,
-                                       kind = 'device'`,
-      ).bind(id, text(body.note), now, accountId),
+                                       kind = 'device',
+                                       -- Un pannello vecchio che non lo manda
+                                       -- non deve cancellare quello che c'è.
+                                       code_enc = COALESCE(excluded.code_enc, codes.code_enc)`,
+      ).bind(id, text(body.note), now, accountId, codeEnc || null),
       env.DB.prepare(
         `INSERT INTO profiles (id, data, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
@@ -334,6 +351,26 @@ async function adminRoutes(request, env, url) {
     await env.DB.prepare('UPDATE codes SET note = ? WHERE id = ?')
       .bind(text(body.note), id)
       .run();
+    return json({ ok: true });
+  }
+
+  // Ricordarsi il codice di un dispositivo registrato PRIMA dell'80° giro, che
+  // in `code_enc` non ha niente. Non tocca la casellina: non deve raggiungere
+  // il dispositivo, deve solo far sì che il pannello lo sappia nominare.
+  //
+  // ⚠️ Il pannello manda `id` = SHA-256 del codice che ha digitato, non il
+  // codice: se sbaglia riga, l'hash non è quello di nessun dispositivo e qui si
+  // ferma con 404. La verifica è quindi nella forma stessa della chiamata — il
+  // server non conosce nessun codice e non potrebbe controllare altro.
+  if (route === 'device-code' && request.method === 'POST') {
+    const body = await readJson(request);
+    if (!body) return json({ error: 'bad_json' }, 400);
+    const id = text(body.id, 64);
+    if (!ROW_ID_RE.test(id)) return json({ error: 'bad_id' }, 400);
+    const codeEnc = (body.codeEnc ?? '').toString();
+    if (!codeEnc || codeEnc.length > MAX_PROFILE_BYTES) return json({ error: 'bad_data' }, 400);
+    if (!(await codeRow(env, id))) return json({ error: 'unknown_code' }, 404);
+    await env.DB.prepare('UPDATE codes SET code_enc = ? WHERE id = ?').bind(codeEnc, id).run();
     return json({ ok: true });
   }
 

@@ -29,7 +29,13 @@ CREATE TABLE IF NOT EXISTS codes (
   account_id   TEXT,
   -- 'account' = riga che autorizza la sincronizzazione condivisa di un'utenza,
   -- non un dispositivo. NULL/'device' = un'installazione vera.
-  kind         TEXT
+  kind         TEXT,
+  -- Il codice del dispositivo **cifrato** (AES-GCM, chiave derivata da
+  -- ADMIN_TOKEN): serve al pannello per mostrarlo accanto al dispositivo, così
+  -- chi chiama si riconosce. Cifra e decifra il browser; qui restano byte
+  -- illeggibili, e la chiave di riga resta l'hash. NULL sui dispositivi
+  -- registrati prima dell'80° giro: quel codice non è recuperabile.
+  code_enc     TEXT
 );
 
 -- Migrazione: ogni codice che aveva già dei dati continua a funzionare, così
