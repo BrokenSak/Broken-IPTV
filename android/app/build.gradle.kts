@@ -23,14 +23,39 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.brokeniptv.broken_iptv"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    // Due canali = due APPLICAZIONI diverse, non la stessa con un interruttore
+    // dentro: solo così la copia di prova si installa ACCANTO a quella vera
+    // invece di sostituirla, con dati, codice del dispositivo e icona suoi.
+    //
+    // ⚠️ `app_name` NON sta in strings.xml: se ci fosse, il resValue del
+    // flavor sarebbe un duplicato e la build fallirebbe. Lo definiscono i
+    // flavor, tutti e due.
+    // AGP recente: i resValue sono spenti di default e vanno riaccesi, o la
+    // build muore con "contains custom resource values, but the feature is
+    // disabled".
+    buildFeatures {
+        resValues = true
+    }
+
+    flavorDimensions += "canale"
+    productFlavors {
+        create("stabile") {
+            dimension = "canale"
+            resValue("string", "app_name", "Broken IPTV")
+        }
+        create("prova") {
+            dimension = "canale"
+            applicationIdSuffix = ".prova"
+            versionNameSuffix = "-prova"
+            resValue("string", "app_name", "Broken IPTV Prova")
+        }
     }
 
     signingConfigs {

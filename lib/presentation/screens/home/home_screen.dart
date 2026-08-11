@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../../core/build_channel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -69,6 +71,28 @@ class HomeScreen extends ConsumerWidget {
             const AppLogo(size: 30),
             const SizedBox(width: 12),
             Text('Broken IPTV', style: Theme.of(context).textTheme.titleLarge),
+            if (kIsBeta) ...[
+              const SizedBox(width: 10),
+              // ⚠️ Le due copie hanno la stessa icona e lo stesso nome dentro
+              // l'app: senza questo, una volta configurate, non si distinguono
+              // più e finiresti per provare la versione sbagliata.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  kChannelLabel,
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
         actions: [

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/build_channel.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +14,11 @@ final updateServiceProvider = Provider<UpdateService>((ref) => UpdateService());
 /// Checked once at startup (the home watches it): resolves to the newer
 /// release when there is one, else null. Never throws.
 final updateCheckProvider = FutureProvider<UpdateInfo?>((ref) async {
+  // La copia di prova non si aggiorna da sola: il file degli aggiornamenti
+  // descrive l'app VERA, che ha un altro pacchetto. Seguirlo vorrebbe dire
+  // proporre "aggiorna" e installare l'altra app di fianco, all'infinito.
+  if (!kUpdatesEnabled) return null;
+
   final info = await PackageInfo.fromPlatform();
   final build = int.tryParse(info.buildNumber) ?? 0;
   return ref.read(updateServiceProvider).check(build);

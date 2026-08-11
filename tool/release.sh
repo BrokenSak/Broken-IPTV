@@ -2,9 +2,17 @@
 #
 # Due canali, un comando.
 #
-#   tool/release.sh beta ["note"]   costruisce APK+EXE e li carica SOLO sulla
+#   tool/release.sh beta ["note"]   costruisce DUE app e le carica SOLO sulla
 #                                   pre-release `beta`. version.json NON si
 #                                   tocca: nessun dispositivo riceve niente.
+#
+#                                   BrokenIPTVProva.*  la installi tu: pacchetto
+#                                     `...broken_iptv.prova`, nome "Broken IPTV
+#                                     Prova", dati e codice dispositivo suoi. Si
+#                                     affianca all'app vera invece di
+#                                     sostituirla, e non si aggiorna da sola.
+#                                   BrokenIPTV.*  la gemella stabile, che
+#                                     `promuovi` copiera' cosi' com'e'.
 #   tool/release.sh promuovi "note" prende gli asset GIA' PROVATI dalla beta,
 #                                   li copia sulla release stabile e alza
 #                                   version.json (poi push).
@@ -42,43 +50,54 @@ msg() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 versione_apk() { "$AAPT" dump badging "$1" 2>/dev/null | head -1; }
 
 comando_beta() {
-  msg "1/5  Controlli (analyze + test): niente build su codice rotto."
+  msg "1/6  Controlli (analyze + test): niente build su codice rotto."
   flutter analyze
   rm -rf build/unit_test_assets 2>/dev/null || true
   flutter test
 
-  msg "2/5  APK"
-  # Il lock su build\app torna a ogni tanto: cancellare l'albero e' il rimedio
-  # documentato (§4), `flutter clean` da solo non basta.
-  powershell -Command "Remove-Item -Recurse -Force build\\app -ErrorAction SilentlyContinue" 2>/dev/null || true
-  flutter build apk --release
+  # Si costruiscono DUE app, non una:
+  #   prova   = quella che installi tu, pacchetto e dati suoi, si affianca
+  #   stabile = il gemello identico che verra' promosso senza ricompilare
+  # Cosi' quello che va a tutti e' un binario nato nello stesso momento di
+  # quello che hai provato, non una ricostruzione fatta giorni dopo.
+  msg "2/6  APK di prova (com.brokeniptv.broken_iptv.prova)"
+  powershell -Command "Remove-Item -Recurse -Force build\app -ErrorAction SilentlyContinue" 2>/dev/null || true
+  flutter build apk --release --flavor prova --dart-define=BETA=true
 
-  msg "3/5  Windows + installer"
+  msg "3/6  APK gemella stabile"
+  flutter build apk --release --flavor stabile
+
+  msg "4/6  Windows: copia di prova e gemella stabile"
   powershell -Command "Get-Process | Where-Object {\$_.Name -match 'broken_iptv|BrokenIPTV'} | Stop-Process -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+  flutter build windows --release --dart-define=BETA=true
+  "$ISCC" installer/broken_iptv_prova.iss >/dev/null
   flutter build windows --release
   "$ISCC" installer/broken_iptv.iss >/dev/null
 
-  msg "4/5  Copia in 'app pronte/'"
+  msg "5/6  Copia in 'app pronte/'"
   mkdir -p "app pronte"
-  cp "$APK_LOCALE" "app pronte/BrokenIPTV.apk"
+  cp build/app/outputs/flutter-apk/app-prova-release.apk "app pronte/BrokenIPTVProva.apk"
+  cp build/app/outputs/flutter-apk/app-stabile-release.apk "app pronte/BrokenIPTV.apk"
+  cp installer/output/BrokenIPTVProva.exe "app pronte/BrokenIPTVProva.exe"
   cp "$EXE_LOCALE" "app pronte/BrokenIPTV.exe"
+  versione_apk "app pronte/BrokenIPTVProva.apk"
   versione_apk "app pronte/BrokenIPTV.apk"
 
-  msg "5/5  Carico sulla PRE-RELEASE (nessuno la riceve automaticamente)"
-  gh release upload "$REPO_TAG_BETA" \
-    "app pronte/BrokenIPTV.apk" "app pronte/BrokenIPTV.exe" --clobber
+  msg "6/6  Carico sulla PRE-RELEASE (nessuno la riceve automaticamente)"
+  gh release upload "$REPO_TAG_BETA"     "app pronte/BrokenIPTVProva.apk" "app pronte/BrokenIPTVProva.exe"     "app pronte/BrokenIPTV.apk" "app pronte/BrokenIPTV.exe" --clobber
   if [ $# -gt 0 ]; then
     gh release edit "$REPO_TAG_BETA" --notes "$1"
   fi
 
   cat <<FINE
 
-Fatto. Da provare a mano:
-  Firestick   adb install -r "app pronte/BrokenIPTV.apk"
-  Windows     lancia "app pronte/BrokenIPTV.exe"
-  Telefono    https://github.com/BrokenSak/Broken-IPTV/releases/download/$REPO_TAG_BETA/BrokenIPTV.apk
+Fatto. Da installare tu (si affianca all'app vera, non la sostituisce):
+  Firestick   adb install -r "app pronte/BrokenIPTVProva.apk"
+  Windows     lancia "app pronte/BrokenIPTVProva.exe"
+  Telefono    https://github.com/BrokenSak/Broken-IPTV/releases/download/$REPO_TAG_BETA/BrokenIPTVProva.apk
 
-version.json NON e' stato toccato: gli altri dispositivi non vedono niente.
+La copia di prova ha playlist, codice dispositivo e preferiti SUOI, e non si
+aggiorna da sola. version.json non e' stato toccato.
 Quando sei convinto:  tool/release.sh promuovi "cosa cambia, in italiano"
 FINE
 }
@@ -93,7 +112,11 @@ comando_promuovi() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
 
-  msg "1/4  Scarico dalla beta gli asset gia' provati (non ricostruisco)"
+  # Si promuove la GEMELLA STABILE caricata insieme alla copia di prova: stesso
+  # commit, stesso momento, nessuna ricompilazione. Quello che hai installato tu
+  # era il suo gemello col pacchetto `.prova` (diverso per forza, o non si
+  # sarebbe potuto affiancare).
+  msg "1/4  Scarico dalla beta la gemella stabile (non ricostruisco)"
   gh release download "$REPO_TAG_BETA" --dir "$tmp" \
     --pattern 'BrokenIPTV.apk' --pattern 'BrokenIPTV.exe' --clobber
 

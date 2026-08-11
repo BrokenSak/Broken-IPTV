@@ -72,9 +72,24 @@ ProviderContainer _container(FakeDownloadService fake) {
 /// The queue is fire-and-forget, so there is no future to await; the deadline
 /// is generous on purpose — a tighter one flaked when the whole suite ran in
 /// parallel on a loaded machine.
-Future<void> _until(bool Function() test, {Duration timeout = const Duration(seconds: 10)}) async {
+/// Aspetta che [test] diventi vero, e **fallisce dicendo che è scaduto** se non
+/// succede.
+///
+/// ⚠️ Prima scadeva in silenzio e il test proseguiva ad asserire su uno stato
+/// incompleto: a macchina carica (durante una release, con le build in corso)
+/// il risultato era un fallimento che indicava la cosa sbagliata. La coda è
+/// fire-and-forget, non c'è un future da attendere: qui l'unica difesa è
+/// un'attesa generosa e un messaggio onesto quando non basta.
+Future<void> _until(
+  bool Function() test, {
+  Duration timeout = const Duration(seconds: 30),
+  String cosa = 'la condizione attesa',
+}) async {
   final deadline = DateTime.now().add(timeout);
-  while (!test() && DateTime.now().isBefore(deadline)) {
+  while (!test()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('scaduti ${timeout.inSeconds}s aspettando: $cosa');
+    }
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
@@ -140,8 +155,10 @@ void main() {
       await n.enqueue(_vod('2'));
       await n.enqueue(_vod('3'));
 
-      await _until(() =>
-          c.read(downloadsProvider).where((d) => d.isCompleted).length == 3);
+      await _until(
+        () => c.read(downloadsProvider).where((d) => d.isCompleted).length == 3,
+        cosa: 'tre scaricamenti completati',
+      );
       expect(fake.maxActive, 1, reason: 'never more than one active transfer');
     });
 

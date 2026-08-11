@@ -1,5 +1,7 @@
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 
+import '../../core/build_channel.dart';
+
 /// Thin wrapper around the local Hive boxes used across the app.
 /// Boxes hold plain Map data — no generated type adapters needed.
 class StorageService {
@@ -43,7 +45,12 @@ class StorageService {
     if (testPath != null) {
       Hive.init(testPath);
     } else {
-      await Hive.initFlutter();
+      // ⚠️ La copia di prova scrive in una sottocartella sua. Su Android il
+      // pacchetto diverso basterebbe, ma su Windows Hive finisce nella cartella
+      // Documenti dell'utente, uguale per tutte e due: senza questo la copia di
+      // prova aprirebbe i box di quella vera e ci scriverebbe dentro
+      // (playlist, codice del dispositivo, preferiti).
+      await Hive.initFlutter(kDataSubdirectory);
     }
     profilesBox = await Hive.openBox<Map>(profilesBoxName);
     prefsBox = await Hive.openBox(prefsBoxName);
