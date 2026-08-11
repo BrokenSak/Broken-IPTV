@@ -508,9 +508,12 @@ class _AccountSection extends ConsumerWidget {
           final max = a.maxConnections?.toString() ?? '?';
           row(Icons.lan_outlined, 'Connessioni', '$active / $max attive');
         }
-        if (a.serverUrl != null && a.serverUrl!.isNotEmpty) {
-          row(Icons.dns_outlined, 'Server', a.serverUrl!);
-        }
+        // ⚠️ Niente riga "Server" (79° giro, richiesta dell'utente): era
+        // l'ultimo posto dell'app in cui l'indirizzo del pannello si leggeva a
+        // schermo, e chi guarda la TV non lo deve vedere — vale la stessa
+        // ragione per cui la scheda della playlist mostra solo il nome
+        // dell'utenza. `AccountInfo.serverUrl` resta: serve al codice, non
+        // agli occhi.
         if (rows.isEmpty) {
           return const Text('Informazioni account non disponibili.', style: _kItemDesc);
         }

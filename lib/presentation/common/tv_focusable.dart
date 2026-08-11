@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/ui_mode.dart';
@@ -51,6 +52,13 @@ class TvFocusable extends StatefulWidget {
   /// true = TV (focusable + autofocus), false = Windows (no focus at all).
   @visibleForTesting
   static bool? debugDpadOverride;
+
+  /// Quanto sporge l'anello **fuori** dall'elemento, per lato.
+  ///
+  /// Serve a chi mette un focusabile contro un bordo dello schermo (i pulsanti
+  /// della barra in alto): l'anello è disegnato in overlay e lì fuori non c'è
+  /// più schermo, quindi va lasciato questo margine — vedi [TvIconButton].
+  static double get ringSpace => _FocusRing.outset(true);
 
   @override
   State<TvFocusable> createState() => _TvFocusableState();
@@ -143,6 +151,13 @@ class _TvFocusableState extends State<TvFocusable> {
       canRequestFocus: _focusable,
       skipTraversal: !_focusable,
       onKeyEvent: _handleKey,
+      // ⚠️ Spento di proposito, e rimesso a mano più sotto: `Focus` infilerebbe
+      // un `Semantics` PROPRIO SOPRA il figlio, e quello diventerebbe il render
+      // object che il framework misura per portare in vista l'elemento
+      // focalizzato — scavalcando [_RingReveal] e ributtando l'anello fuori
+      // dalla lista. Il nodo semantico c'è lo stesso, solo un gradino più in
+      // basso (stesse proprietà che mette `Focus`).
+      includeSemantics: false,
       child: Builder(
         builder: (context) {
           // Focus.of registers a dependency, so this subtree rebuilds when
@@ -155,65 +170,79 @@ class _TvFocusableState extends State<TvFocusable> {
 
           // NB: no scaling. A focused tile used to grow, which made it spill
           // over its neighbours and overlap their captions.
-          return MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: _hoverEnabled ? (_) => setState(() => _hovered = true) : null,
-            onExit: _hoverEnabled ? (_) => setState(() => _hovered = false) : null,
-            child: GestureDetector(
-              onTap: widget.onTap,
-              onLongPress: widget.onLongPress,
-              // Momentary press feedback (touch on phone, click on Windows).
-              onTapDown: (_) => setState(() => _pressed = true),
-              onTapUp: (_) => setState(() => _pressed = false),
-              onTapCancel: () => setState(() => _pressed = false),
-              // The ring is an OVERLAY that sits OUTSIDE the child, never a
-              // border on it — see [_FocusRing]. Clip.none lets it hang past
-              // the child's box; it takes no space, so nothing reflows and the
-              // neighbours don't move (the sin that got scaling removed).
-              child: Stack(
-                // ⚠️ passthrough, NOT the default. A Stack hands its
-                // non-positioned children LOOSE constraints, so the child
-                // shrank to its own content instead of filling the box its
-                // parent had sized — the home tiles came out small and the ring
-                // (drawn on the real box) ended up larger than the thing it was
-                // framing. Reported: "i tre pulsanti sono tutti piccoli e il
-                // riquadro è più grande di quello che hai evidenziato".
-                // passthrough forwards the parent's constraints untouched,
-                // which is what the old AnimatedContainer did.
-                fit: StackFit.passthrough,
-                clipBehavior: Clip.none,
-                children: [
-                  // ⚠️ Nothing in here may be a focus stop of its own. Android
-                  // runs under `NavigationMode.directional` (app.dart), and in
-                  // that mode `InkResponse._canRequestFocus` returns **true
-                  // unconditionally** — so every Material ink surface nested
-                  // here (a ListTile, a Chip, any button) owns a SECOND focus
-                  // node over the same box. It paints no ring with this theme,
-                  // and [_handleKey] above bails out unless *this* node holds
-                  // the primary focus, so OK on it does nothing: an invisible
-                  // dead stop. §7 already forbade putting focusable widgets in
-                  // here; this enforces it once instead of asking every call
-                  // site to remember an `ExcludeFocus`.
-                  // NB no layout cost: Focus adds no render object, so the
-                  // Stack still sees exactly one child and `passthrough` keeps
-                  // handing it the parent's constraints.
-                  ExcludeFocus(child: widget.child),
-                  if (showRing || softHint)
-                    // Negative insets: the ring hangs outside the child on
-                    // every side. `Positioned` allows them; `Padding` asserts.
-                    Positioned(
-                      left: -_FocusRing.outset(showRing),
-                      top: -_FocusRing.outset(showRing),
-                      right: -_FocusRing.outset(showRing),
-                      bottom: -_FocusRing.outset(showRing),
-                      child: IgnorePointer(
-                        child: _FocusRing(
-                          radius: widget.borderRadius,
-                          strong: showRing,
+          //
+          // ⚠️ [_RingReveal] deve restare il PRIMO render object sotto il
+          // `Focus`: è quello che il framework misura per portare in vista
+          // l'elemento a cui passa il fuoco (vedi la sua nota).
+          return _RingReveal(
+            margin: _FocusRing.revealMargin,
+            child: Semantics(
+              focusable: _focusable,
+              focused: _focusable ? focused : null,
+              onFocus: _focusable ? () => Focus.of(context).requestFocus() : null,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: _hoverEnabled ? (_) => setState(() => _hovered = true) : null,
+                onExit: _hoverEnabled ? (_) => setState(() => _hovered = false) : null,
+                child: GestureDetector(
+                  onTap: widget.onTap,
+                  onLongPress: widget.onLongPress,
+                  // Momentary press feedback (touch on phone, click on Windows).
+                  onTapDown: (_) => setState(() => _pressed = true),
+                  onTapUp: (_) => setState(() => _pressed = false),
+                  onTapCancel: () => setState(() => _pressed = false),
+                  // The ring is an OVERLAY that sits OUTSIDE the child, never a
+                  // border on it — see [_FocusRing]. Clip.none lets it hang past
+                  // the child's box; it takes no space, so nothing reflows and
+                  // the neighbours don't move (the sin that got scaling removed).
+                  child: Stack(
+                    // ⚠️ passthrough, NOT the default. A Stack hands its
+                    // non-positioned children LOOSE constraints, so the child
+                    // shrank to its own content instead of filling the box its
+                    // parent had sized — the home tiles came out small and the
+                    // ring (drawn on the real box) ended up larger than the thing
+                    // it was framing. Reported: "i tre pulsanti sono tutti
+                    // piccoli e il riquadro è più grande di quello che hai
+                    // evidenziato". passthrough forwards the parent's constraints
+                    // untouched, which is what the old AnimatedContainer did.
+                    fit: StackFit.passthrough,
+                    clipBehavior: Clip.none,
+                    children: [
+                      // ⚠️ Nothing in here may be a focus stop of its own.
+                      // Android runs under `NavigationMode.directional`
+                      // (app.dart), and in that mode
+                      // `InkResponse._canRequestFocus` returns **true
+                      // unconditionally** — so every Material ink surface nested
+                      // here (a ListTile, a Chip, any button) owns a SECOND focus
+                      // node over the same box. It paints no ring with this
+                      // theme, and [_handleKey] above bails out unless *this*
+                      // node holds the primary focus, so OK on it does nothing:
+                      // an invisible dead stop. §7 already forbade putting
+                      // focusable widgets in here; this enforces it once instead
+                      // of asking every call site to remember an `ExcludeFocus`.
+                      // NB no layout cost: Focus adds no render object, so the
+                      // Stack still sees exactly one child and `passthrough`
+                      // keeps handing it the parent's constraints.
+                      ExcludeFocus(child: widget.child),
+                      if (showRing || softHint)
+                        // Negative insets: the ring hangs outside the child on
+                        // every side. `Positioned` allows them; `Padding`
+                        // asserts.
+                        Positioned(
+                          left: -_FocusRing.outset(showRing),
+                          top: -_FocusRing.outset(showRing),
+                          right: -_FocusRing.outset(showRing),
+                          bottom: -_FocusRing.outset(showRing),
+                          child: IgnorePointer(
+                            child: _FocusRing(
+                              radius: widget.borderRadius,
+                              strong: showRing,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
           );
@@ -221,6 +250,55 @@ class _TvFocusableState extends State<TvFocusable> {
       ),
     );
   }
+}
+
+/// Fa contare all'anello lo spazio che occupa **solo** quando una lista deve
+/// portare in vista l'elemento che ha appena preso il fuoco.
+///
+/// ⚠️ Difetto vero, visto sul Firestick (79° giro, segnalato: "molte cose sono
+/// tagliate"): scendendo col telecomando in Impostazioni o in un catalogo, la
+/// lista scorre quel tanto che basta a far entrare l'elemento — e siccome
+/// l'anello è un overlay disegnato **fuori** dall'elemento (§7), finiva oltre
+/// il bordo della lista, che lì taglia. Risultato: l'ultima riga di ogni
+/// schermata aveva l'anello mozzato in basso.
+///
+/// Come funziona: il framework misura ciò che deve rivelare con
+/// [RenderObject.paintBounds] del render object che trova sotto il `Focus`
+/// (`Scrollable.ensureVisible` → `RenderViewportBase.getOffsetToReveal`, dove
+/// `rect ??= target.paintBounds`). Questo render object dichiara i propri
+/// paintBounds **gonfiati** del margine dell'anello: la lista scorre di quei
+/// pixel in più e l'anello entra tutto.
+///
+/// Costo di layout **zero** — `size` non cambia, quindi nessun vicino si
+/// sposta e la regola del 62°/63° giro resta intatta. È l'unico modo di
+/// ottenere lo spazio senza rimpicciolire ogni elemento dell'app di 12px.
+class _RingReveal extends SingleChildRenderObjectWidget {
+  const _RingReveal({required this.margin, required super.child});
+
+  final double margin;
+
+  @override
+  _RenderRingReveal createRenderObject(BuildContext context) =>
+      _RenderRingReveal(margin);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderRingReveal renderObject) {
+    renderObject.margin = margin;
+  }
+}
+
+class _RenderRingReveal extends RenderProxyBox {
+  _RenderRingReveal(this._margin);
+
+  double _margin;
+  set margin(double value) {
+    if (value == _margin) return;
+    _margin = value;
+    markNeedsPaint();
+  }
+
+  @override
+  Rect get paintBounds => super.paintBounds.inflate(_margin);
 }
 
 /// The selection ring: a bright edge **around** the focused element, sitting on
@@ -264,6 +342,14 @@ class _FocusRing extends StatelessWidget {
 
   /// How far outside the child the ring's box starts.
   static double outset(bool strong) => _gap + widthFor(strong);
+
+  /// Quanto spazio si fa lasciare da una lista quando ci porta sopra il fuoco.
+  ///
+  /// L'anello **più un po' d'aria**: rivelato all'osso, l'anello finisce a filo
+  /// del bordo dello schermo — verificato sul Firestick, dove la riga bianca
+  /// combaciava con l'ultimo pixel in basso e sembrava tagliata comunque (e su
+  /// una TV con overscan lo sarebbe davvero).
+  static double get revealMargin => outset(true) + 6;
 
   @override
   Widget build(BuildContext context) {
@@ -320,6 +406,14 @@ Widget? tvBackButton(BuildContext context) {
 /// zeroes `highlightColor` + uses `NoSplash`), which on TV looked like the
 /// button couldn't be reached. Tap, click and OK all fire [onPressed]; the
 /// [tooltip] is an accessibility label only (no pop-up box).
+///
+/// ⚠️ **Il margine esterno non è decorativo** (79° giro, visto sul Firestick):
+/// questi pulsanti stanno negli angoli della barra in alto, cioè contro i bordi
+/// dello schermo, e l'anello è disegnato **fuori** dall'elemento (§7). Senza
+/// margine, l'anello del pulsante "indietro" usciva a sinistra e in alto e
+/// quello delle azioni a destra: si vedeva mezzo cerchio. Lo spazio va preso
+/// **da dentro** (l'icona ha meno padding), perché la casella del `leading` è
+/// larga esattamente [kToolbarHeight] e non si può sforare.
 class TvIconButton extends StatelessWidget {
   const TvIconButton({
     super.key,
@@ -337,12 +431,15 @@ class TvIconButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: tooltip,
-      child: TvFocusable(
-        borderRadius: 24,
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: icon,
+      child: Padding(
+        padding: EdgeInsets.all(TvFocusable.ringSpace),
+        child: TvFocusable(
+          borderRadius: 22,
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: icon,
+          ),
         ),
       ),
     );

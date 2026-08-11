@@ -197,17 +197,22 @@ class _CategorySidebarState extends State<CategorySidebar> {
             borderRadius: BorderRadius.circular(12),
             border: selected ? Border.all(color: Colors.white, width: 1.5) : null,
           ),
-          padding: EdgeInsets.fromLTRB(indent ? 30 : 16, 14, 16, 14),
+          padding: EdgeInsets.fromLTRB(indent ? 26 : 12, 12, 12, 12),
           child: Row(
             children: [
               if (icon != null) ...[
                 Icon(icon, size: 18, color: selected ? Colors.white : AppColors.textSecondary),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
               ],
               Expanded(
                 child: Text(
                   label,
-                  maxLines: 1,
+                  // Due righe, non una (79° giro, segnalato: "molte cose sono
+                  // tagliate"): in 230px di barra "CONTINUA A GUARDARE" e mezza
+                  // lista di categorie finivano in "CONTINUA A GU…". La riga
+                  // cresce solo quando serve davvero, e il nome intero resta
+                  // anche in alto al centro (73° giro).
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: selected ? Colors.white : AppColors.textPrimary,
@@ -260,9 +265,20 @@ class _CategorySidebarState extends State<CategorySidebar> {
       width: GridMetrics.sidebarWidth(context),
       child: Scrollbar(
         child: ListView(
-          // Reserve gutters on both sides so the selection highlight/glow is
-          // never clipped by the screen edge (left) or the scrollbar (right).
-          padding: const EdgeInsets.only(left: 12, right: 10),
+          // Reserve gutters on all four sides so the selection ring is never
+          // clipped: dai lati lo prendevano il bordo dello schermo (a sinistra)
+          // e la barra di scorrimento (a destra) — sopra e sotto **niente**, e
+          // la prima e l'ultima categoria avevano l'anello mozzato contro il
+          // bordo della lista (79° giro). Lo scorrimento non può rimediare da
+          // sé: agli estremi non c'è altro da scorrere.
+          padding: EdgeInsets.only(
+            left: 12,
+            right: 10,
+            // Un filo più dell'anello: a filo esatto si legge tagliato lo
+            // stesso (e con l'overscan di certe TV lo sarebbe davvero).
+            top: TvFocusable.ringSpace + 4,
+            bottom: TvFocusable.ringSpace + 4,
+          ),
           children: rows,
         ),
       ),
@@ -283,11 +299,11 @@ class _AdultHeader extends StatelessWidget {
       borderRadius: 12,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
             const Icon(Icons.explicit, size: 18, color: AppColors.textSecondary),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             const Expanded(
               child: Text(
                 'ADULTI',
