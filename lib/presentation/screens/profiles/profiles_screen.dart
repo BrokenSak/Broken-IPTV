@@ -13,11 +13,14 @@ import '../../common/tv_focusable.dart';
 
 /// The screen of a device that has no playlist yet.
 ///
-/// ⚠️ There is nothing to press here, and that is deliberate (72° giro): the
-/// playlist is **one**, and it is the one the owner sends from the panel. This
-/// screen's whole job is to show the code to read out loud and to wait — it
-/// polls every 10s, so the playlist lands while the person is still looking at
-/// it.
+/// Mostra il codice da dettare e **aspetta**: controlla ogni 10s, così la
+/// playlist arriva mentre la persona sta ancora guardando lo schermo.
+///
+/// ⚠️ L'unico pulsante è la via a mano, e sta **sotto** il codice di proposito
+/// (74° giro, richiesta dell'utente): prima si legge che non serve fare niente
+/// se si parla con chi ha dato l'app, poi — per chi le credenziali ce le ha
+/// già — c'è il modulo. La playlist resta comunque **una sola**: il modulo
+/// sostituisce, non aggiunge.
 class ProfilesScreen extends ConsumerStatefulWidget {
   const ProfilesScreen({super.key});
 
@@ -103,7 +106,7 @@ class _WaitingForPlaylist extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -119,14 +122,33 @@ class _WaitingForPlaylist extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Sto aspettando: arriva da sola appena viene configurata.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 14),
               AskForHelpWithCode(code: code),
+              const SizedBox(height: 16),
+              // ⚠️ L'ordine è la richiesta dell'utente (74° giro): prima il
+              // codice e la frase che spiega che NON serve fare niente, e solo
+              // dopo la via a mano — in secondo piano, per chi le credenziali
+              // ce le ha già. Se stesse in cima, chi non le ha si metterebbe a
+              // compilare un modulo che non sa compilare: è esattamente il
+              // difetto del 69° giro, al contrario.
+              const Text(
+                'Hai già indirizzo, utente e password?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              TvFocusable(
+                borderRadius: 14,
+                autofocus: true,
+                onTap: () => context.push('/profiles/add'),
+                child: ExcludeFocus(
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push('/profiles/add'),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Inseriscila a mano'),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

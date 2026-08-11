@@ -23,6 +23,7 @@ import 'package:broken_iptv/presentation/common/tv_text_field.dart';
 import 'package:broken_iptv/presentation/screens/downloads/downloads_screen.dart';
 import 'package:broken_iptv/presentation/screens/home/home_screen.dart';
 import 'package:broken_iptv/presentation/screens/onboarding/device_mode_screen.dart';
+import 'package:broken_iptv/presentation/screens/profiles/add_profile_screen.dart';
 import 'package:broken_iptv/presentation/screens/profiles/profiles_screen.dart';
 import 'package:broken_iptv/presentation/screens/series/series_detail_screen.dart';
 import 'package:broken_iptv/presentation/screens/settings/settings_screen.dart';
@@ -134,6 +135,7 @@ Widget _shell(Widget screen) {
         '/settings',
         '/downloads',
         '/profiles',
+        '/profiles/add',
         '/vod/:id',
         '/series/:id',
       ])
@@ -275,14 +277,17 @@ void main() {
     await _auditScreen(tester, const SettingsScreen(), name: 'Impostazioni');
   });
 
+  testWidgets('playlist a mano (campi + salva)', (tester) async {
+    await _auditScreen(tester, const AddProfileScreen(),
+        name: 'Playlist a mano',
+        // Atterra sul wrapper di navigazione del primo campo.
+        expectAutofocus: false);
+  });
+
   testWidgets('schermata di attesa della playlist', (tester) async {
-    // Dal 72° giro qui NON c'è niente da premere: la playlist è una sola e la
-    // manda il proprietario dal pannello, quindi la schermata mostra il codice
-    // e aspetta. `expectAutofocus: false` è quindi corretto — ma l'audit degli
-    // stop invisibili resta, perché il difetto da prendere è il contrario:
-    // qualcosa che prende il fuoco senza disegnare niente.
-    await _auditScreen(tester, const ProfilesScreen(),
-        name: 'Attesa playlist', expectAutofocus: false);
+    // Un solo premibile: la via a mano, sotto il codice (74° giro). Prende
+    // l'autofocus, quindi qui l'assertion vale.
+    await _auditScreen(tester, const ProfilesScreen(), name: 'Attesa playlist');
   });
 
   testWidgets('dettaglio film', (tester) async {

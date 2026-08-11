@@ -21,20 +21,22 @@ class AskForHelpWithCode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'La playlist te la mette chi ti ha dato questa applicazione.',
+            textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const Text(
-            'Leggigli questo codice: arriva da sola, senza toccare niente.',
-            style: TextStyle(color: Colors.white70, height: 1.4),
+            'Leggigli questo codice e arriva da sola, senza toccare niente.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, height: 1.35),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           DeviceCodeBox(code: code),
         ],
       ),
@@ -48,7 +50,7 @@ class AskForHelpWithCode extends StatelessWidget {
 /// Impostazioni, and in both places it is something you read aloud, not
 /// something you press.
 class DeviceCodeBox extends StatelessWidget {
-  const DeviceCodeBox({super.key, required this.code, this.fontSize = 26});
+  const DeviceCodeBox({super.key, required this.code, this.fontSize = 24});
 
   final String code;
   final double fontSize;
@@ -56,7 +58,7 @@ class DeviceCodeBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),

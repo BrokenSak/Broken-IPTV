@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/fullscreen.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'state/provisioning_providers.dart';
 import 'state/sync_providers.dart';
 import 'state/update_providers.dart';
 
@@ -25,6 +26,12 @@ class _BrokenIptvAppState extends ConsumerState<BrokenIptvApp> {
   /// re-fetch on every window focus (desktop reports one per focus change).
   DateTime _lastUpdateCheck = DateTime.now();
   static const _updateRecheckInterval = Duration(minutes: 30);
+
+  /// Lo stesso, per la playlist lasciata dal pannello: un dispositivo acceso e
+  /// lasciato lì non si accorgeva di un indirizzo corretto finché qualcuno non
+  /// riapriva l'app da zero. Ora basta tornarci sopra.
+  DateTime _lastProvisionCheck = DateTime.now();
+  static const _provisionRecheckInterval = Duration(minutes: 2);
 
   @override
   void initState() {
@@ -57,6 +64,15 @@ class _BrokenIptvAppState extends ConsumerState<BrokenIptvApp> {
     if (DateTime.now().difference(_lastUpdateCheck) > _updateRecheckInterval) {
       _lastUpdateCheck = DateTime.now();
       ref.invalidate(updateCheckProvider);
+    }
+    // Idem per il pannello: se il proprietario corregge l'indirizzo mentre la
+    // TV è accesa, prima bisognava chiudere e riaprire l'app. Ora arriva al
+    // primo ritorno in primo piano. Stesso freno di sopra, perché su desktop
+    // questo scatta a ogni cambio di finestra.
+    if (!underFlutterTest &&
+        DateTime.now().difference(_lastProvisionCheck) > _provisionRecheckInterval) {
+      _lastProvisionCheck = DateTime.now();
+      unawaited(ref.read(provisioningProvider.notifier).checkAndApply());
     }
   }
 

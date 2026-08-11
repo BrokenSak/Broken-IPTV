@@ -74,7 +74,39 @@ void main() {
     expect(find.textContaining(RegExp(r'^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')),
         findsOneWidget);
 
-    // Nessun modo di aggiungerne una a mano: è il punto della schermata.
-    expect(find.text('Aggiungi playlist'), findsNothing);
+    // La via a mano c'è, ma sta sotto il codice (74° giro).
+    expect(find.text('Inseriscila a mano'), findsOneWidget);
+  });
+
+  testWidgets('la via a mano salva la playlist e entra nell app',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Inseriscila a mano'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nome Playlist'), 'Casa');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Username'), 'utente1');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Password'), 'segreta');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Link'), 'fake-host.invalid:8080');
+
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Salva'));
+      await Future.delayed(const Duration(milliseconds: 300));
+    });
+    // ⚠️ Niente pumpAndSettle: con una playlist attiva la home avvia le
+    // chiamate al pannello e i loro timer, sotto il finto orologio, non si
+    // spengono mai.
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    expect(find.text('TV'), findsOneWidget);
+    expect(find.text('Film'), findsOneWidget);
   });
 }

@@ -104,14 +104,43 @@ void main() {
     );
   });
 
-  testWidgets('non c’è nessun modo di aggiungerla a mano', (tester) async {
-    // È la richiesta dell'utente del 72° giro: la playlist è una sola, quella
-    // che manda lui. Un pulsante qui rimetterebbe in piedi la seconda.
+  testWidgets('la via a mano c’è, ma DOPO il codice', (tester) async {
+    // 74° giro: l'utente l'ha voluta rimettere, "ma solo dopo avergli fatto
+    // leggere il codice e spiegato che possono non fare nulla". L'ordine è il
+    // requisito, non un dettaglio: in cima, chi non ha le credenziali si
+    // metterebbe a compilare un modulo che non sa compilare.
     await tester.pumpWidget(emptyList());
     await tester.pump();
 
-    expect(find.text('Aggiungi playlist'), findsNothing);
-    expect(find.byType(ElevatedButton), findsNothing);
+    final codice = tester.getRect(find.text(DeviceCode.grouped(DeviceCode.read())));
+    final aMano = tester.getRect(find.text('Inseriscila a mano'));
+    expect(aMano.top, greaterThan(codice.bottom),
+        reason: 'il modulo a mano deve stare sotto il codice, non sopra');
+    expect(find.textContaining('te la mette chi ti ha dato'), findsOneWidget);
+  });
+
+  testWidgets('su uno schermo TV ci stanno codice E pulsante, senza scorrere',
+      (tester) async {
+    // Col D-pad la lista scorre solo seguendo il focus: il pulsante prende
+    // l'autofocus, e se non ci sta tutto è lui a trascinare via il codice.
+    // Misure del Firestick: 1920x1080 fisici a densità 2.0 = 960x540 logici.
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    TvFocusable.debugDpadOverride = true;
+    addTearDown(() => TvFocusable.debugDpadOverride = null);
+
+    await tester.pumpWidget(emptyList());
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    final codice = tester.getRect(find.text(DeviceCode.grouped(DeviceCode.read())));
+    final aMano = tester.getRect(find.text('Inseriscila a mano'));
+    expect(codice.top, greaterThanOrEqualTo(0.0));
+    expect(aMano.bottom, lessThanOrEqualTo(540.0),
+        reason: 'il pulsante è sotto la piega: col D-pad trascina via il codice');
+    expect(tester.takeException(), isNull, reason: 'niente overflow');
   });
 
   testWidgets('in Impostazioni il codice si vede ANCHE dopo l autofocus',
