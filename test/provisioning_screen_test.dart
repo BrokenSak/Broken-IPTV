@@ -192,11 +192,13 @@ void main() {
         reason: 'il codice è sotto la piega: col D-pad non ci si arriva');
   });
 
-  testWidgets('col telecomando si può tornare al codice dopo essere sceso',
+  testWidgets('col telecomando si torna al codice dopo essere sceso',
       (tester) async {
     // ⚠️ Il caso vero segnalato dall'utente: non è l'arrivo, è il ritorno. Si
     // scende fra le impostazioni, la lista scorre, il codice esce dallo
-    // schermo — ed è testo, quindi se risalendo non rientra è perso per sempre.
+    // schermo — e se risalendo non rientra è perso. Dal 78° giro ci si torna
+    // perché la sua riga è una fermata del telecomando: è questo test a dire
+    // che la navigabilità fa davvero il suo lavoro.
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.reset);

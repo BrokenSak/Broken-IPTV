@@ -115,10 +115,9 @@ void main() {
     // la riga mentre lo stop del focus copriva solo il nome, e l'anello usciva
     // più stretto della cosa che doveva incorniciare.
     //
-    // Dal 72° giro in Impostazioni la playlist è sola lettura e non ha più un
-    // anello: la stessa regola si misura ora sulle chip della modalità
-    // dispositivo, che sono la prima cosa premibile della schermata e hanno la
-    // stessa forma (superficie riempita dentro un TvFocusable).
+    // Dal 78° giro la riga della playlist è tornata a essere una fermata del
+    // telecomando (sola lettura, ma navigabile) ed è il punto d'atterraggio:
+    // è lì che si misura, perché è l'unica con l'anello acceso all'arrivo.
     debugDeviceModeOverride = DeviceMode.tv;
 
     await tester.pumpWidget(ProviderScope(
@@ -138,23 +137,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
     }
 
-    // La lista costruisce solo ciò che è a schermo: le chip stanno sotto la
-    // piega e senza questo non esistono nemmeno nell'albero.
-    final label = find.text('Originale');
-    await tester.scrollUntilVisible(label, 120,
-        scrollable: find.byType(Scrollable).first);
-    for (var i = 0; i < 4; i++) {
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-
+    final label = find.text('Nessuna playlist');
     final stop = find.ancestor(of: label, matching: find.byType(TvFocusable));
-    expect(stop, findsOneWidget, reason: 'la chip deve avere il suo stop');
+    expect(stop, findsOneWidget, reason: 'la riga playlist deve avere il suo stop');
 
     final surface = _decoratedRect(
       tester,
       find.ancestor(of: label, matching: find.byType(DecoratedBox)),
       matches: (d) => d.color != null,
-      describe: 'la superficie della chip',
+      describe: 'la superficie della riga',
       self: true,
     );
     final ring = _decoratedRect(

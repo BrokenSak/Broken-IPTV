@@ -119,26 +119,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         leading: tvBackButton(context),
         title: const Text('Impostazioni'),
       ),
-      // ⚠️ Il codice del dispositivo sta FUORI dalla lista, in una barra che
-      // non scorre mai. Dentro non poteva stare: è testo, e col D-pad la lista
-      // scorre solo seguendo il focus — sceso una volta, il codice usciva dallo
-      // schermo e non rientrava più nemmeno risalendo (segnalato dall'utente; e
-      // il test lo riproduce: dopo il giro il widget non era nemmeno più
-      // costruito). Nessun ordine delle sezioni risolve: l'unica soluzione è
-      // non metterlo in una lista.
-      body: Column(
+      // ⚠️ Ogni riquadro di questa schermata è una FERMATA del telecomando
+      // (`_RigaLeggibile`), anche quelli che non fanno niente. Col D-pad una
+      // lista scorre solo seguendo il focus: ciò su cui non ci si può fermare
+      // non si può rileggere, e infatti la sincronizzazione "non si vedeva da
+      // nessuna parte" (segnalato) — il fuoco la scavalcava. Per lo stesso
+      // motivo il codice del dispositivo è tornato nella lista: da riga
+      // navigabile ci si torna sopra, e la barra fissa in fondo non serve più.
+      body: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
           const Text('Playlist', style: _kSectionTitle),
           const SizedBox(height: 8),
           // ⚠️ Read-only, and there is exactly one (72° giro, richiesta
           // dell'utente): la playlist è quella che il proprietario manda dal
           // pannello. Niente aggiungi/modifica/elimina, e nessun elenco da cui
           // scegliere — quindi qui dentro non c'è un solo elemento focusabile.
-          _PlaylistSummary(profile: active),
+          _RigaLeggibile(autofocus: true, child: _PlaylistSummary(profile: active)),
+          const SizedBox(height: 8),
+          const Text('Codice del dispositivo', style: _kSectionTitle),
+          const SizedBox(height: 8),
+          _RigaLeggibile(child: _CodiceDispositivo(code: ref.watch(deviceCodeProvider))),
           if (debugAndroidSectionOverride ?? Platform.isAndroid) ...[
             const SizedBox(height: 24),
             const Text('Modalità dispositivo', style: _kSectionTitle),
@@ -147,14 +148,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Expanded(
                   child: TvFocusable(
-                    // ⚠️ Primo elemento premibile della schermata: è qui che
-                    // atterra il telecomando. Senza autofocus si aprirebbe con
-                    // nulla di selezionato e OK non farebbe niente (59°/65°
-                    // giro). Tutto ciò che gli sta sopra è sola lettura e viene
-                    // scorso via appena si scende: per questo il codice del
-                    // dispositivo NON sta qui dentro ma nella barra fissa in
-                    // fondo (vedi il commento sul body).
-                    autofocus: true,
                     onTap: () => _setMode(DeviceMode.tv),
                     child: _ModeChip(label: 'TV / Telecomando', selected: _currentMode == DeviceMode.tv),
                   ),
@@ -182,10 +175,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: TvFocusable(
                     borderRadius: 14,
-                    // Su Windows la sezione "Modalità dispositivo" non c'è, e
-                    // il primo premibile è questo.
-                    autofocus: !(debugAndroidSectionOverride ?? Platform.isAndroid) &&
-                        aspect == VideoAspect.values.first,
                     onTap: () => ref.read(playerSettingsProvider.notifier).setAspect(aspect),
                     child: _ModeChip(
                       label: aspect.label,
@@ -244,13 +233,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           const Text('Sincronizzazione', style: _kSectionTitle),
           const SizedBox(height: 8),
-          const _SyncSection(),
+          const _RigaLeggibile(child: _SyncSection()),
           const SizedBox(height: 24),
           // Sotto, non in mezzo: è informazione da leggere, non da raggiungere
           // in fretta, e in cima rubava lo spazio al codice del dispositivo.
           const Text('Account', style: _kSectionTitle),
           const SizedBox(height: 8),
-          const _AccountSection(),
+          const _RigaLeggibile(child: _AccountSection()),
           const SizedBox(height: 24),
           const Text('Rete', style: _kSectionTitle),
           const SizedBox(height: 8),
@@ -269,25 +258,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ),
-              ],
-            ),
-          ),
-          _DeviceCodeBar(code: ref.watch(deviceCodeProvider)),
         ],
       ),
     );
   }
 }
 
-/// Il codice del dispositivo, fisso in fondo a Impostazioni.
+/// Il codice del dispositivo, dentro la lista come riga navigabile.
 ///
-/// ⚠️ Fuori dalla lista di proposito: è testo, e col telecomando una lista
-/// scorre solo seguendo il focus — quello che esce dallo schermo non rientra.
-/// Qui invece è sempre a video, da qualunque punto delle impostazioni, che è
-/// esattamente ciò che serve quando qualcuno al telefono ti chiede "leggimi il
-/// codice". Non è focusabile: non c'è niente da premere.
-class _DeviceCodeBar extends StatelessWidget {
-  const _DeviceCodeBar({required this.code});
+/// Ci si può tornare sopra col telecomando (è dentro un [_RigaLeggibile]), che
+/// è la cosa che serve quando qualcuno al telefono ti chiede "leggimi il
+/// codice" mentre sei in fondo alle impostazioni.
+class _CodiceDispositivo extends StatelessWidget {
+  const _CodiceDispositivo({required this.code});
 
   final String code;
 
@@ -295,10 +278,11 @@ class _DeviceCodeBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-      decoration: const BoxDecoration(
-        color: Color(0xCC000000),
-        border: Border(top: BorderSide(color: AppColors.glassBorder)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(
         children: [
@@ -322,6 +306,36 @@ class _DeviceCodeBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Una riga che si **legge**: il telecomando ci si ferma sopra, con l'anello
+/// visibile, ma premere OK non fa niente.
+///
+/// ⚠️ Sembra contraddire la regola del 64° giro ("mai fermate che non fanno
+/// nulla"), e invece è la stessa regola: quella vietava le fermate **invisibili**
+/// — ink Material che prendono il fuoco senza disegnare niente. Qui l'anello si
+/// vede, e la fermata serve a una cosa concreta: col D-pad una lista scorre solo
+/// seguendo il focus, quindi ciò su cui non ci si può fermare non si può
+/// nemmeno **rileggere**. È il motivo per cui la sincronizzazione "non si vedeva
+/// da nessuna parte" (segnalato): il fuoco la scavalcava di netto.
+class _RigaLeggibile extends StatelessWidget {
+  const _RigaLeggibile({required this.child, this.autofocus = false});
+
+  final Widget child;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: TvFocusable(
+        borderRadius: 14,
+        autofocus: autofocus,
+        onTap: () {},
+        child: child,
       ),
     );
   }
@@ -367,7 +381,10 @@ class _PlaylistSummary extends StatelessWidget {
                 Text(
                   p == null
                       ? 'La mette chi ti ha dato l\'applicazione: leggigli il codice qui sotto.'
-                      : '${p.username}@${p.host}',
+                      // ⚠️ Solo il nome dell'utenza, mai indirizzo e utente
+                      // (richiesta dell'utente): chi guarda la TV non deve
+                      // leggerli, e chi passa in salotto nemmeno.
+                      : 'Utenza attiva',
                   style: _kItemDesc,
                 ),
               ],
@@ -569,15 +586,16 @@ class _SyncSection extends ConsumerWidget {
                 Text(sync.enabled ? 'Attiva' : 'Non attiva', style: _kItemTitle),
                 const SizedBox(height: 4),
                 const Text(
-                  'Tiene uguali i preferiti e "Continua a guardare" su tutti i '
-                  'dispositivi della stessa persona: quello che guardi in salotto '
-                  'lo ritrovi al punto giusto sul telefono.',
+                  'Film e serie li riprendi dal punto esatto su ogni '
+                  'dispositivo: quello che guardi in salotto lo continui dal '
+                  'telefono da dove sei rimasto, e i preferiti sono gli stessi '
+                  'ovunque.',
                   style: _kItemDesc,
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Ha un costo aggiuntivo, quindi si accende solo dal pannello di '
-                  'chi ti ha dato l\'applicazione: chiedila a lui.',
+                  'Se la vuoi, contatta chi ti ha dato l\'applicazione: si '
+                  'accende solo dal suo pannello, perché ha un costo aggiuntivo.',
                   style: _kItemDesc,
                 ),
                 const SizedBox(height: 6),

@@ -323,11 +323,12 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
     await tester.pumpAndSettle();
 
-    // Arrival: dal 72° giro le sezioni playlist, codice e sincronizzazione
-    // sono di sola lettura, quindi il PRIMO elemento premibile — e il punto
-    // d'atterraggio del telecomando — è la chip "Originale" (su questo host
-    // non-Android la sezione "Modalità dispositivo" non esiste). Un paio di
-    // frecce a destra si fermano sull'ultima chip, "Riempi".
+    // Arrival: dal 78° giro OGNI riquadro è una fermata del telecomando, anche
+    // quelli che non fanno niente (senza, col D-pad non si possono rileggere).
+    // Si atterra quindi sulla riga della playlist, in cima: due Giù per
+    // arrivare alle chip del rapporto d'aspetto — playlist, codice, chip — e
+    // due Destra che si fermano sull'ultima, "Riempi".
+    await _pressDown(tester, 2);
     for (var i = 0; i < 2; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
@@ -345,12 +346,11 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
     await tester.pumpAndSettle();
 
-    // Si parte dalle chip del rapporto d'aspetto (vedi sopra): giù
-    // sull'interruttore dei sottotitoli, giù ancora sulle chip del salto.
-    // Quelle righe stanno sotto la piega, quindi ogni salto del focus fa
-    // scorrere la lista (ensureVisible) — esattamente come col telecomando
-    // vero. Le frecce a destra si fermano sull'ultima chip, "60 s".
-    await _pressDown(tester, 2);
+    // Dalla riga della playlist: codice, chip dell'aspetto, interruttore dei
+    // sottotitoli, chip del salto. Quelle righe stanno sotto la piega, quindi
+    // ogni salto del focus fa scorrere la lista (ensureVisible) — esattamente
+    // come col telecomando vero. Le frecce a destra si fermano su "60 s".
+    await _pressDown(tester, 4);
     for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
