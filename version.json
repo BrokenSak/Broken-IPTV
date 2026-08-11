@@ -1,7 +1,7 @@
 {
-  "build": 44,
-  "version": "1.11.1",
-  "notes": "Il codice del dispositivo ora sta in una barra fissa in fondo alle Impostazioni: prima era dentro l'elenco e col telecomando, una volta sceso, non si riusciva più a tornarci sopra.",
+  "build": 50,
+  "version": "1.14.1",
+  "notes": "Gli anelli di selezione non vengono piu' tagliati (barra in alto, fondo delle liste, griglie) e i nomi delle categorie si leggono per intero. La scheda dell'utenza non mostra piu' l'indirizzo del server. Dai giri precedenti: l'aggiornamento della lista scarica davvero canali, film e serie, la categoria scelta e' scritta per intero in alto, e in Impostazioni si arriva su tutto col telecomando.",
   "apk": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.apk",
   "exe": "https://github.com/BrokenSak/Broken-IPTV/releases/latest/download/BrokenIPTV.exe"
 }
