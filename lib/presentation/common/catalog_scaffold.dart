@@ -28,12 +28,21 @@ class CatalogScaffold extends ConsumerStatefulWidget {
     required this.onSearch,
     required this.body,
     this.initialQuery = '',
+    this.categoria,
   });
 
   final String title;
   final ValueChanged<String> onSearch;
   final Widget body;
   final String initialQuery;
+
+  /// La categoria scelta in questo momento, scritta **per intero** in alto al
+  /// centro (richiesta dell'utente).
+  ///
+  /// Nell'elenco a sinistra i nomi lunghi finiscono tagliati e il conteggio è
+  /// minuscolo: scorrendo col telecomando non sai bene dove sei. Qui invece
+  /// c'è spazio per il nome intero e per quante cose contiene.
+  final CategoriaScelta? categoria;
 
   @override
   ConsumerState<CatalogScaffold> createState() => _CatalogScaffoldState();
@@ -80,7 +89,13 @@ class _CatalogScaffoldState extends ConsumerState<CatalogScaffold> {
                 ),
                 style: const TextStyle(color: AppColors.textPrimary),
               )
-            : Text(widget.title),
+            : _TitoloConCategoria(
+                sezione: widget.title,
+                categoria: widget.categoria,
+              ),
+        centerTitle: true,
+        // Due righe stanno strette nei 56 di default.
+        toolbarHeight: widget.categoria == null ? kToolbarHeight : 74,
         actions: [
           if (_searching)
             TvIconButton(icon: const Icon(Icons.close), onPressed: _closeSearch)
@@ -289,6 +304,94 @@ class _AdultHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Nome e conteggio della categoria scelta.
+class CategoriaScelta {
+  const CategoriaScelta(this.nome, this.quanti);
+
+  final String nome;
+  final int? quanti;
+
+  /// Come si legge in alto: "Azione · 128 elementi".
+  String get descrizione {
+    if (quanti == null) return nome;
+    return '$nome  ·  ${quanti == 1 ? '1 elemento' : '$quanti elementi'}';
+  }
+}
+
+/// Traduce l'id scelto in nome + conteggio, con le stesse etichette che usa
+/// l'elenco a sinistra per le voci fisse.
+///
+/// Pura, e in un posto solo: le tre schermate (TV, Film, Serie) avrebbero
+/// dovuto ripetere la stessa catena di `if`, e una delle tre sarebbe rimasta
+/// indietro al primo cambio.
+CategoriaScelta? categoriaScelta({
+  required String? id,
+  required List<XtreamCategory> categorie,
+  Map<String, int> conteggi = const {},
+  int? preferiti,
+  int? continua,
+  int? tutti,
+  int? recenti,
+}) {
+  if (id == null) return null;
+  switch (id) {
+    case kFavoritesCategoryId:
+      return CategoriaScelta('Preferiti', preferiti);
+    case kContinueCategoryId:
+      return CategoriaScelta('Continua a guardare', continua);
+    case kAllCategoryId:
+      return CategoriaScelta('Tutti', tutti);
+    case kRecentCategoryId:
+      return CategoriaScelta('Ultimi aggiunti', recenti);
+  }
+  for (final c in categorie) {
+    if (c.id == id) return CategoriaScelta(c.name, conteggi[c.id]);
+  }
+  return null;
+}
+
+class _TitoloConCategoria extends StatelessWidget {
+  const _TitoloConCategoria({required this.sezione, this.categoria});
+
+  final String sezione;
+  final CategoriaScelta? categoria;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = categoria;
+    if (c == null) return Text(sezione);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          sezione.toUpperCase(),
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            letterSpacing: 1.6,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          c.descrizione,
+          textAlign: TextAlign.center,
+          // Due righe prima di tagliare: i nomi dei pannelli sono lunghi, ed
+          // è proprio il caso per cui questa riga esiste.
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            height: 1.15,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui_mode.dart';
+import '../../../data/models/xtream_category.dart';
 import '../../../data/models/favorite_item.dart';
 import '../../../data/models/vod_item.dart';
 import '../../../state/favorites_providers.dart';
@@ -45,9 +46,28 @@ class _VodScreenState extends ConsumerState<VodScreen> {
     }
 
     final categories = ref.watch(vodCategoriesProvider);
+    // Serve anche FUORI dal body: la riga in alto vive nella barra, non nel
+    // corpo, e deve sapere su cosa siamo fermi.
+    final catsOra = categories.value ?? const <XtreamCategory>[];
+    final contiOra = ref.watch(vodCategoryCountsProvider).value ?? const {};
+    final adultiOra = {for (final c in catsOra) if (isAdultCategory(c.name)) c.id};
+    final totaleOra = contiOra.entries
+        .where((e) => !adultiOra.contains(e.key))
+        .fold<int>(0, (a, e) => a + e.value);
     return CatalogScaffold(
       title: 'Film',
       onSearch: (q) => setState(() => _query = q),
+      categoria: categoriaScelta(
+        id: _selectedCategoryId ?? kContinueCategoryId,
+        categorie: catsOra,
+        conteggi: contiOra,
+        preferiti: ref.watch(favoritesProvider).where((f) => f.type == FavoriteType.vod).length,
+        continua: ref.watch(watchProgressProvider).isEmpty
+            ? 0
+            : ref.read(watchProgressRepositoryProvider).continueMovies().length,
+        tutti: totaleOra,
+        recenti: totaleOra > 100 ? 100 : totaleOra,
+      ),
       body: categories.when(
         data: (cats) {
           _selectedCategoryId ??= kContinueCategoryId;

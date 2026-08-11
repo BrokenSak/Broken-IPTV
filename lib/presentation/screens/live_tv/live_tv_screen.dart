@@ -67,6 +67,13 @@ class _LiveTvScreenState extends ConsumerState<LiveTvScreen> {
     return CatalogScaffold(
       title: 'TV',
       onSearch: (q) => setState(() => _query = q),
+      categoria: categoriaScelta(
+        id: _selectedCategoryId ?? kFavoritesCategoryId,
+        categorie: categories.value ?? const [],
+        conteggi: ref.watch(liveCategoryCountsProvider).value ?? const {},
+        preferiti:
+            ref.watch(favoritesProvider).where((f) => f.type == FavoriteType.live).length,
+      ),
       body: categories.when(
         data: (cats) {
           _selectedCategoryId ??= kFavoritesCategoryId;

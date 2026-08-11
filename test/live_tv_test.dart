@@ -77,4 +77,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Canale Test'), findsOneWidget);
   });
+
+  testWidgets('in alto al centro c’è la categoria scelta, per intero e col conteggio',
+      (tester) async {
+    // Richiesta dell'utente (77° giro): nell'elenco a sinistra i nomi lunghi
+    // finiscono tagliati e il conteggio è minuscolo, quindi scorrendo col
+    // telecomando non sai bene dove sei.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          selectedProfileIdProvider.overrideWith(_FixedSelectedProfileId.new),
+          liveRepositoryProvider.overrideWith((ref) async => FakeLiveRepository()),
+        ],
+        child: MaterialApp(theme: AppTheme.dark, home: const LiveTvScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Si parte sui Preferiti (vuoti su questo finto profilo).
+    expect(find.textContaining('Preferiti'), findsWidgets);
+
+    // Scelgo una categoria vera dall'elenco a sinistra.
+    await tester.tap(find.text('Sport').first);
+    await tester.pumpAndSettle();
+
+    // In alto compare il nome intero + quante cose contiene.
+    expect(
+      find.textContaining(RegExp(r'Sport\s+·\s+\d+ element')),
+      findsOneWidget,
+      reason: 'la riga in alto deve dire nome e conteggio della categoria',
+    );
+  });
 }
