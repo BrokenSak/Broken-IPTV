@@ -242,7 +242,13 @@ async function adminRoutes(request, env, url) {
         `SELECT c.id, c.note, c.account_id, c.sync_enabled, c.created_at, c.last_seen,
                 c.code_enc,
                 (SELECT 1 FROM blobs    b WHERE b.id = c.id) AS has_blob,
-                (SELECT 1 FROM profiles p WHERE p.id = c.id) AS has_casellina
+                (SELECT 1 FROM profiles p WHERE p.id = c.id) AS has_casellina,
+                -- La casellina cifrata. Il pannello la apre col codice del
+                -- dispositivo (che dall'80° giro si ricorda) per leggere
+                -- l'eventuale **indirizzo solo per questo dispositivo**: senza,
+                -- l'unico modo di sapere chi ce l'ha sarebbe riscriverla alla
+                -- cieca. Qui restano byte illeggibili come prima.
+                (SELECT p.data FROM profiles p WHERE p.id = c.id) AS casellina
            FROM codes c
           WHERE COALESCE(c.kind, 'device') <> 'account'
           ORDER BY c.created_at DESC`,

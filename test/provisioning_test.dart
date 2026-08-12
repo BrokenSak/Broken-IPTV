@@ -67,6 +67,27 @@ const _playlistUtenza =
 const _accountId = '9d0bccd597a6cb9d307c7f69d3610770';
 const _accountCode = 'VWL29SGWJZW7';
 
+/// L'**indirizzo solo per questo dispositivo** (82° giro): stesso abbonamento,
+/// altra porta d'ingresso. Anche questi due cifrati vengono dal pannello vero
+/// guidato in un browser vero — l'utenza `Prova82` sta su
+/// `http://uno.tv:8080` con utente `u1`, e la casellina del dispositivo porta
+/// `host: http://due.tv:9090`.
+///
+/// È la coppia che dimostra la cosa che conta: l'eccezione sta nella casellina
+/// (l'unico posto che è di **un** dispositivo), mentre utente, password e
+/// codice di sincronizzazione continuano ad arrivare dall'utenza — cioè i
+/// preferiti restano condivisi, che era il motivo per cui una seconda utenza
+/// non andava bene.
+const _casellinaConIndirizzo =
+    'oqfWIO7BvRjFW9UcuHPyJxk+HQaWzM6datRdbfmAYfJ6CGp1E1/jvtgWAEG3LmmMhxJt9XrS'
+    'LR8jmd+Dvy9UdRbs2TeJ4zwXiPW0lZQMNjzoEHoPD+71meHpol4xFEWPANazQlc+QzXjW7zk'
+    'XSywnMZDfz3oOGKTaD2FoXjMu8zo0o99e6++psYwvAeHGi4b7FUmOA==';
+const _playlistProva82 =
+    'P1hkloX3seQvhbOynbubmPHhoNptqpW7/Lij7jSzX3t7H0ffDHBhgNPYL+QwMWauv6FM/n0c'
+    'F52pAdfjuOlmBzUq077DtxBarbd1dEYctQNg1o7FbsgBdUv3etJJaXwRoIDaKE38OojVn/oM'
+    '5g88XlFbreTra62gBkReV4k=';
+const _accountIdProva82 = 'a50133be21189bce9dfcb298bdd911b6';
+
 void main() {
   group('decifratura di quello che manda il pannello', () {
     test('apre il blob cifrato dal browser', () async {
@@ -286,6 +307,75 @@ void main() {
         await p.service.fetch(endpoint: 'https://x.dev', code: _code),
         isNull,
       );
+    });
+  });
+
+  group('indirizzo solo per questo dispositivo (82° giro)', () {
+    /// Il Worker con l'utenza `Prova82` e un dispositivo che ha un indirizzo
+    /// suo dentro la casellina.
+    ProvisioningService pannello({int accountAt = 2000, int sync = 1}) {
+      final adapter = _FakeAdapter((options) {
+        if (options.uri.path.startsWith('/v1/profile/')) {
+          return _json({'data': _casellinaConIndirizzo, 'updatedAt': 3000});
+        }
+        if (options.uri.path == '/v1/account/$_accountIdProva82') {
+          return _json({
+            'data': _playlistProva82,
+            'updatedAt': accountAt,
+            'sync': sync,
+          });
+        }
+        return _json({'error': 'not_found'}, 404);
+      });
+      return ProvisioningService(dio: Dio()..httpClientAdapter = adapter);
+    }
+
+    test('l utenza dice un indirizzo, la casellina ne dice un altro', () async {
+      // I due cifrati, aperti a mano: è quello che rende il test capace di
+      // accorgersi se il pannello cambia formato da un lato solo.
+      final casellina = await decryptProvisioning(_casellinaConIndirizzo, _code);
+      expect(casellina!['host'], 'http://due.tv:9090');
+      expect(casellina['accountId'], _accountIdProva82);
+
+      final playlist = await decryptProvisioning(
+        _playlistProva82,
+        casellina['account'].toString(),
+      );
+      expect(playlist!['host'], 'http://uno.tv:8080',
+          reason: 'l\'utenza resta dov\'è: l\'eccezione è del dispositivo');
+      expect(playlist['username'], 'u1');
+    });
+
+    test('vince l indirizzo del dispositivo, il resto resta dell utenza',
+        () async {
+      final result =
+          await pannello().fetch(endpoint: 'https://x.dev', code: _code);
+
+      expect(result!.host, 'http://due.tv:9090', reason: 'la porta d\'ingresso è sua');
+      expect(result.username, 'u1', reason: 'utente e password sono dell\'utenza');
+      expect(result.password, 'p1');
+      expect(result.name, 'Prova82');
+      // E soprattutto: resta nello stesso gruppo di sincronizzazione, che era
+      // il motivo per cui "fanne due utenze" non andava bene.
+      expect(result.syncCode, isNotNull);
+      expect(result.fromAccount, isTrue);
+    });
+
+    test('senza preferiti condivisi l indirizzo suo vale lo stesso', () async {
+      final result =
+          await pannello(sync: 0).fetch(endpoint: 'https://x.dev', code: _code);
+      expect(result!.host, 'http://due.tv:9090');
+      expect(result.syncCode, isNull);
+    });
+
+    test('una correzione della playlist non se lo porta via', () async {
+      // Il proprietario cambia la password dell'utenza mesi dopo: l'invio è
+      // più recente e viene applicato, ma l'eccezione sta nella casellina e
+      // viene riletta ogni volta.
+      final result = await pannello(accountAt: 9999)
+          .fetch(endpoint: 'https://x.dev', code: _code);
+      expect(result!.host, 'http://due.tv:9090');
+      expect(result.updatedAt, 9999, reason: 'vale la data più recente delle due');
     });
   });
 }

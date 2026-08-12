@@ -12,6 +12,12 @@
  *     hero block any more: you pull it out **inside** the utenza you are adding
  *     the device to, which is also why the page never asks "which utenza?".
  *
+ * Dall'82° giro un dispositivo può avere un **indirizzo suo** (stesso
+ * abbonamento, altra porta d'ingresso: utente, password, categorie e preferiti
+ * condivisi restano quelli dell'utenza). Vive nella casellina, l'unico posto
+ * che è di un dispositivo solo — e si può scrivere mesi dopo perché dall'80°
+ * giro il pannello si ricorda i codici.
+ *
  * Greyscale and glass, like the app. The page is public HTML; nothing behind it
  * loads without the admin token, which the browser keeps in localStorage and
  * sends as a bearer header.
@@ -133,6 +139,9 @@ export default `<!doctype html>
      accesa. (Prima lì c'era l'inizio dell'hash, che non somiglia a niente.) */
   .dev .code { color: var(--text); font-weight: 600; letter-spacing: .08em; }
   .dev .code.none { color: var(--muted); font-weight: 400; letter-spacing: 0; }
+  /* L'eccezione va vista, o è una trappola: un dispositivo che si collega
+     altrove e nessuno se lo ricorda. */
+  .dev .own-host { color: var(--text); }
   /* The name is a field, but a row of fields reads as a form and this is a
      list. So it looks like text until you go near it. */
   .dev input[type=text] {
@@ -762,16 +771,31 @@ export default `<!doctype html>
 
     /* [{ account, code, payload }] for every utenza whose playlist opens. */
     var opened = [];
+    /* E i dispositivi che hanno un **indirizzo loro** (82° giro): senza, un
+       cambio di dominio li lascerebbe indietro in silenzio — sono proprio
+       quelli che non seguono l'utenza. */
+    var eccezioni = [];
 
     function matching() {
       var wanted = from.value.trim();
       return opened.filter(function (o) { return !wanted || o.payload.host === wanted; });
     }
 
+    function matchingEccezioni() {
+      var wanted = from.value.trim();
+      return eccezioni.filter(function (e) { return !wanted || e.box.host === wanted; });
+    }
+
     function refresh() {
       var n = matching().length;
-      apply.disabled = !to.value.trim() || !n;
-      apply.textContent = n === 1 ? 'Aggiorna 1 utenza' : 'Aggiorna ' + n + ' utenze';
+      var m = matchingEccezioni().length;
+      apply.disabled = !to.value.trim() || !(n + m);
+      // "0 utenze e 1 dispositivo" è vero ma si legge male: si nomina solo
+      // quello che c'è davvero.
+      var pezzi = [];
+      if (n) pezzi.push(plural(n, 'utenza', 'utenze'));
+      if (m) pezzi.push(plural(m, 'dispositivo', 'dispositivi'));
+      apply.textContent = 'Aggiorna ' + (pezzi.length ? pezzi.join(' e ') : 'niente');
     }
     from.addEventListener('input', refresh);
     to.addEventListener('input', refresh);
@@ -785,11 +809,28 @@ export default `<!doctype html>
         });
     })).then(function (rows) {
       opened = rows.filter(Boolean);
-      var counts = {}, order = [];
-      opened.forEach(function (o) {
-        if (!counts[o.payload.host]) { counts[o.payload.host] = 0; order.push(o.payload.host); }
-        counts[o.payload.host]++;
+      return Promise.all(state.devices.filter(function (d) {
+        return d.account_id && d.code_enc && d.casellina;
+      }).map(function (d) {
+        return deviceCode(d).then(function (code) {
+          if (!code) return null;
+          return casellinaDi(d, code).then(function (box) {
+            if (!box || !box.host) return null;
+            var acc = state.accounts.filter(function (a) { return a.id === d.account_id; })[0];
+            return acc ? { device: d, code: code, box: box, account: acc } : null;
+          });
+        });
+      })).then(function (extra) {
+        eccezioni = extra.filter(Boolean);
       });
+    }).then(function () {
+      var counts = {}, order = [];
+      function conta(host) {
+        if (!counts[host]) { counts[host] = 0; order.push(host); }
+        counts[host]++;
+      }
+      opened.forEach(function (o) { conta(o.payload.host); });
+      eccezioni.forEach(function (e) { conta(e.box.host); });
       if (!order.length) {
         found.textContent = 'Nessuna playlist da spostare.';
         return;
@@ -805,10 +846,12 @@ export default `<!doctype html>
     apply.addEventListener('click', function () {
       var address = to.value.trim();
       var rows = matching();
+      var mie = matchingEccezioni();
       apply.disabled = true;
       /* One at a time: a handful of utenze, and a failure halfway through
          should say which ones already moved. */
       var done = 0;
+      var fatti = 0;
       rows.reduce(function (chain, o) {
         return chain.then(function () {
           return encrypt(o.code, JSON.stringify({
@@ -825,8 +868,30 @@ export default `<!doctype html>
           }).then(function () { done++; });
         });
       }, Promise.resolve()).then(function () {
+        // Poi le eccezioni, con lo stesso indirizzo nuovo: restano eccezioni
+        // (il dispositivo continua a non seguire l'utenza), ma su un dominio
+        // che esiste ancora.
+        return mie.reduce(function (chain, e) {
+          return chain.then(function () {
+            return accountCode(e.account.id).then(function (shared) {
+              return encrypt(e.code, JSON.stringify({
+                account: shared, accountId: e.account.id, at: Date.now(), host: address
+              }));
+            }).then(function (blob) {
+              return encrypt(ownerSecret(), JSON.stringify({ code: e.code }))
+                .then(function (codeEnc) {
+                  return api('device', { method: 'POST', body: {
+                    code: e.code, accountId: e.account.id,
+                    note: e.device.note || '', casellina: blob, codeEnc: codeEnc
+                  } });
+                });
+            }).then(function () { fatti++; });
+          });
+        }, Promise.resolve());
+      }).then(function () {
         open = '';
-        toast('Indirizzo aggiornato su ' + done + (done === 1 ? ' utenza' : ' utenze'));
+        toast('Indirizzo aggiornato su ' + done + (done === 1 ? ' utenza' : ' utenze') +
+          (fatti ? ' e ' + fatti + (fatti === 1 ? ' dispositivo' : ' dispositivi') : ''));
         return reload();
       }).catch(function (e) {
         toast('Aggiornate ' + done + ' su ' + rows.length + '. ' + e.message);
@@ -842,7 +907,8 @@ export default `<!doctype html>
     box.appendChild(pair);
     box.appendChild(el('p', 'note',
       'Utente e password di ognuna restano quelli che sono: cambia solo l’indirizzo. ' +
-      'Ogni dispositivo lo riceve alla prima apertura.'));
+      'Ogni dispositivo lo riceve alla prima apertura. Vengono spostati anche i ' +
+      'dispositivi che hanno un indirizzo loro, se partivano da quello vecchio.'));
     var actions = el('div', 'actions');
     actions.appendChild(apply);
     actions.appendChild(cancel);
@@ -858,7 +924,7 @@ export default `<!doctype html>
      non si legge ad alta voce (era quello che si vedeva prima — "un codice a
      caso", segnalato). Il codice arriva cifrato col segreto del proprietario e
      si apre qui nel browser. */
-  function deviceRow(device) {
+  function deviceRow(device, account) {
     var frag = document.createDocumentFragment();
     var row = el('div', 'dev');
     var who = el('div', 'who');
@@ -874,18 +940,29 @@ export default `<!doctype html>
     var codeSpan = el('span', 'code');
     var rest = ' · visto ' + ago(device.last_seen) +
       (device.has_casellina ? '' : ' · senza casellina');
+    var hostSpan = el('span', 'own-host');
     meta.appendChild(codeSpan);
     meta.appendChild(el('span', null, rest));
+    meta.appendChild(hostSpan);
     who.appendChild(meta);
 
     if (device.code_enc) {
       codeSpan.textContent = '············';
-      decrypt(ownerSecret(), device.code_enc).then(function (payload) {
-        if (payload && payload.code) { codeSpan.textContent = grouped(payload.code); return; }
-        /* Token cambiato: i codici salvati con quello di prima non si aprono
-           più. Vale la stessa avvertenza delle utenze. */
-        codeSpan.className = 'code none';
-        codeSpan.textContent = 'codice illeggibile con questo token';
+      deviceCode(device).then(function (code) {
+        if (!code) {
+          /* Token cambiato: i codici salvati con quello di prima non si aprono
+             più. Vale la stessa avvertenza delle utenze. */
+          codeSpan.className = 'code none';
+          codeSpan.textContent = 'codice illeggibile con questo token';
+          return;
+        }
+        codeSpan.textContent = grouped(code);
+        /* E già che il codice c'è, si guarda se questo dispositivo ha un
+           indirizzo suo: è l'unica cosa che lo distingue dagli altri della
+           stessa utenza, e invisibile sarebbe una trappola. */
+        return casellinaDi(device, code).then(function (box) {
+          if (box && box.host) hostSpan.textContent = ' · indirizzo suo: ' + box.host;
+        });
       });
     } else {
       codeSpan.className = 'code none';
@@ -907,10 +984,112 @@ export default `<!doctype html>
       ask.addEventListener('click', function () { open = 'code:' + device.id; render(); });
       row.appendChild(ask);
     }
+    /* L'indirizzo suo si può cambiare solo se il pannello si ricorda il codice
+       (la casellina si cifra con quello) e solo dentro un'utenza: fuori non c'è
+       una playlist su cui fare l'eccezione. */
+    if (account && device.code_enc && open !== 'host:' + device.id) {
+      var ownHost = el('button', 'ghost small', 'Indirizzo');
+      ownHost.addEventListener('click', function () { open = 'host:' + device.id; render(); });
+      row.appendChild(ownHost);
+    }
     row.appendChild(forget);
     frag.appendChild(row);
     if (open === 'code:' + device.id) frag.appendChild(codeTeller(device));
+    if (open === 'host:' + device.id && account) {
+      frag.appendChild(deviceHostEditor(device, account));
+    }
     return frag;
+  }
+
+  /* Il codice in chiaro di un dispositivo, aperto col segreto del proprietario.
+     null quando non c'è o quando il token non è più quello con cui fu salvato. */
+  function deviceCode(device) {
+    if (!device.code_enc) return Promise.resolve(null);
+    return decrypt(ownerSecret(), device.code_enc).then(function (payload) {
+      return payload && payload.code ? payload.code : null;
+    });
+  }
+
+  /* La casellina di un dispositivo, aperta col SUO codice. */
+  function casellinaDi(device, code) {
+    if (!device.casellina) return Promise.resolve(null);
+    return decrypt(code, device.casellina);
+  }
+
+  /* ---------- indirizzo solo per questo dispositivo ---------- */
+  /* Stesso abbonamento, altra porta d'ingresso: utente, password e categorie
+     restano quelli dell'utenza — e con loro il codice di sincronizzazione,
+     quindi i preferiti continuano a girare fra telefono e TV. Cambia solo
+     l'indirizzo, e solo per questo dispositivo.
+     Serve quando lo stesso link non va bene ovunque (una rete che blocca il
+     dominio, un mirror più vicino): prima l'unica strada era una seconda
+     utenza, che però spezzava proprio la sincronizzazione.
+     Vive nella **casellina**, l'unico posto che è di un dispositivo solo. */
+  function deviceHostEditor(device, account) {
+    var box = el('div', 'editor');
+    var campo = textInput('', 'http://mirror.tv:8080');
+    var salva = el('button', null, 'Salva');
+    var togli = el('button', 'ghost', 'Usa quello dell’utenza');
+    var annulla = el('button', 'ghost', 'Annulla');
+    var stato = el('p', 'note', 'Apro la casellina...');
+    var codice = null;
+
+    deviceCode(device).then(function (code) {
+      codice = code;
+      if (!code) { stato.textContent = 'Codice illeggibile con questo token.'; return; }
+      return casellinaDi(device, code).then(function (casellina) {
+        campo.value = (casellina && casellina.host) || '';
+        stato.textContent = campo.value
+          ? 'Adesso questo dispositivo usa un indirizzo suo.'
+          : 'Adesso usa l’indirizzo dell’utenza.';
+      });
+    });
+
+    function scrivi(host) {
+      if (!codice) { toast('Codice illeggibile'); return; }
+      salva.disabled = true;
+      togli.disabled = true;
+      accountCode(account.id).then(function (shared) {
+        var casellina = { account: shared, accountId: account.id, at: Date.now() };
+        // Campo vuoto = nessuna eccezione: la casellina torna com'era e il
+        // dispositivo riprende l'indirizzo dell'utenza.
+        if (host) casellina.host = host;
+        return encrypt(codice, JSON.stringify(casellina));
+      }).then(function (blob) {
+        return encrypt(ownerSecret(), JSON.stringify({ code: codice }))
+          .then(function (codeEnc) {
+            return api('device', { method: 'POST', body: {
+              code: codice, accountId: account.id, note: device.note || '',
+              casellina: blob, codeEnc: codeEnc
+            } });
+          });
+      }).then(function () {
+        open = '';
+        toast(host ? 'Indirizzo suo salvato' : 'Torna all’indirizzo dell’utenza');
+        return reload();
+      }).catch(function (e) {
+        salva.disabled = false;
+        togli.disabled = false;
+        toast(e.message);
+      });
+    }
+
+    salva.addEventListener('click', function () { scrivi(campo.value.trim()); });
+    togli.addEventListener('click', function () { scrivi(''); });
+    annulla.addEventListener('click', function () { open = ''; render(); });
+
+    box.appendChild(field('Indirizzo solo per "' + (device.note || 'questo dispositivo') + '"', campo));
+    box.appendChild(stato);
+    box.appendChild(el('p', 'note',
+      'Utente, password e categorie restano quelli dell’utenza, e anche i preferiti ' +
+      'condivisi: cambia solo da dove questo dispositivo si collega. Lo riceve alla ' +
+      'prima apertura.'));
+    var actions = el('div', 'actions');
+    actions.appendChild(salva);
+    actions.appendChild(togli);
+    actions.appendChild(annulla);
+    box.appendChild(actions);
+    return box;
   }
 
   /* "Questo qual è?" — i dispositivi registrati prima dell'80° giro non hanno
@@ -1007,7 +1186,7 @@ export default `<!doctype html>
 
     var devBox = el('div', 'devs');
     if (devices.length) {
-      devices.forEach(function (d) { devBox.appendChild(deviceRow(d)); });
+      devices.forEach(function (d) { devBox.appendChild(deviceRow(d, account)); });
     } else {
       devBox.appendChild(el('div', 'dev-none',
         'Nessun dispositivo. Serve il codice che mostra la sua app.'));

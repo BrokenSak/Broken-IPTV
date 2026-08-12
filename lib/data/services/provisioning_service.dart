@@ -195,6 +195,13 @@ class ProvisioningService {
           accountId: accountId,
           accountCode: account,
           casellinaAt: writtenAt,
+          // L'indirizzo **solo per questo dispositivo**, se il proprietario
+          // gliene ha messo uno (82° giro). Sta nella casellina e non
+          // nell'utenza perché è l'unica cosa che cambia da un dispositivo
+          // all'altro: utente, password e categorie restano quelli
+          // dell'utenza, e con loro il codice di sincronizzazione — quindi i
+          // preferiti continuano a girare fra telefono e TV.
+          hostOverride: payload['host']?.toString().trim(),
         );
       }
 
@@ -219,6 +226,7 @@ class ProvisioningService {
     required String accountId,
     required String accountCode,
     required int casellinaAt,
+    String? hostOverride,
   }) async {
     final envelope = await _envelope(accountUri(endpoint, accountId));
     if (envelope == null) return null;
@@ -238,6 +246,7 @@ class ProvisioningService {
       // switch can be flipped long after the playlist was written.
       syncCode: (envelope['sync'] as num?)?.toInt() == 1 ? accountCode : null,
       fromAccount: true,
+      hostOverride: hostOverride,
     );
   }
 
@@ -246,8 +255,13 @@ class ProvisioningService {
     required int updatedAt,
     String? syncCode,
     bool fromAccount = false,
+    String? hostOverride,
   }) {
-    final host = payload['host']?.toString().trim() ?? '';
+    // L'indirizzo del dispositivo, quando c'è, sostituisce quello dell'utenza:
+    // stesso abbonamento, altra porta d'ingresso.
+    final host = (hostOverride != null && hostOverride.trim().isNotEmpty)
+        ? hostOverride.trim()
+        : payload['host']?.toString().trim() ?? '';
     final username = payload['username']?.toString().trim() ?? '';
     if (host.isEmpty || username.isEmpty) return null;
     final name = payload['name']?.toString().trim() ?? '';
