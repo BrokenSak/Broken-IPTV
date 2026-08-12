@@ -41,6 +41,68 @@ bool shouldAutoSync({
   return changed;
 }
 
+/// Com'è finito l'**ultimo tentativo**, ricordato fra un avvio e l'altro.
+///
+/// Serve perché "ho un codice in tasca" non vuol dire "sto sincronizzando": il
+/// server può rifiutarlo (l'interruttore dell'utenza è spento) e la rete può
+/// non esserci. Senza memoria, appena riaperta l'app non si saprebbe niente e
+/// la schermata direbbe di nuovo la cosa comoda.
+enum SyncOutcome {
+  /// Nessun tentativo di cui si sappia qualcosa.
+  mai,
+
+  /// Giro completo riuscito.
+  ok,
+
+  /// Il server ha detto di no (403): codice non in elenco o sincronizzazione
+  /// spenta per quell'utenza.
+  rifiutata,
+
+  /// Tentativo fallito per altro (rete, server irraggiungibile).
+  fallita,
+}
+
+/// Cosa è vero della sincronizzazione **adesso**, in una parola.
+enum SyncTruth {
+  /// Nessuno l'ha accesa su questo dispositivo.
+  spenta,
+
+  /// L'ha spenta chi gestisce l'app: il server rifiuta il codice.
+  spentaDalPannello,
+
+  /// C'è il codice ma un giro completo non è mai riuscito.
+  maiRiuscita,
+
+  /// Ha funzionato in passato, l'ultimo tentativo no.
+  nonRiuscita,
+
+  /// Funziona.
+  attiva,
+}
+
+/// La regola, pura e testata.
+///
+/// ⚠️ Nasce da una segnalazione dell'utente: «Sincronizzazione dice attiva
+/// anche quando non è effettivamente attiva». Diceva **Attiva** perché il
+/// dispositivo aveva un codice salvato — cioè l'unica cosa che non dipende da
+/// nessuno — mentre il server poteva benissimo rispondere 403 a ogni giro.
+/// Adesso "attiva" vuol dire una cosa sola: **l'ultimo giro completo è andato
+/// a buon fine**.
+SyncTruth syncTruth({
+  required bool hasCode,
+  required SyncOutcome outcome,
+  required DateTime? lastSyncAt,
+}) {
+  // Il rifiuto vale anche senza codice: quando il server dice di no il codice
+  // viene buttato via (è il pannello a comandare), e il motivo va comunque
+  // detto, se no sembra che non l'abbia mai accesa nessuno.
+  if (outcome == SyncOutcome.rifiutata) return SyncTruth.spentaDalPannello;
+  if (!hasCode) return SyncTruth.spenta;
+  if (lastSyncAt == null) return SyncTruth.maiRiuscita;
+  if (outcome == SyncOutcome.fallita) return SyncTruth.nonRiuscita;
+  return SyncTruth.attiva;
+}
+
 class SyncState {
   const SyncState({
     this.code,
@@ -48,6 +110,7 @@ class SyncState {
     this.running = false,
     this.lastSyncAt,
     this.error,
+    this.outcome = SyncOutcome.mai,
   });
 
   /// The shared secret. Null = sync off.
@@ -57,7 +120,15 @@ class SyncState {
   final DateTime? lastSyncAt;
   final String? error;
 
+  /// Come è finito l'ultimo tentativo (ricordato fra un avvio e l'altro).
+  final SyncOutcome outcome;
+
+  /// C'è un codice e un indirizzo: **configurata**, che non vuol dire
+  /// funzionante — per quello c'è [truth].
   bool get enabled => code != null && endpoint.trim().isNotEmpty;
+
+  SyncTruth get truth =>
+      syncTruth(hasCode: enabled, outcome: outcome, lastSyncAt: lastSyncAt);
 
   SyncState copyWith({
     String? code,
@@ -67,6 +138,7 @@ class SyncState {
     DateTime? lastSyncAt,
     String? error,
     bool clearError = false,
+    SyncOutcome? outcome,
   }) {
     return SyncState(
       code: clearCode ? null : (code ?? this.code),
@@ -74,6 +146,7 @@ class SyncState {
       running: running ?? this.running,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       error: clearError ? null : (error ?? this.error),
+      outcome: outcome ?? this.outcome,
     );
   }
 }
@@ -93,6 +166,7 @@ class SyncNotifier extends Notifier<SyncState> {
   static const _endpointKey = 'sync_endpoint';
   static const _lastAtKey = 'sync_last_at';
   static const _fingerprintKey = 'sync_last_fingerprint';
+  static const _outcomeKey = 'sync_last_outcome';
 
   DateTime? _lastAttempt;
 
@@ -108,7 +182,19 @@ class SyncNotifier extends Notifier<SyncState> {
       code: prefs.get(_codeKey) as String?,
       endpoint: (stored == null || stored.isEmpty) ? kDefaultSyncEndpoint : stored,
       lastSyncAt: lastAt == null ? null : DateTime.fromMillisecondsSinceEpoch(lastAt),
+      outcome: _readOutcome(prefs.get(_outcomeKey) as String?),
     );
+  }
+
+  static SyncOutcome _readOutcome(String? stored) {
+    for (final o in SyncOutcome.values) {
+      if (o.name == stored) return o;
+    }
+    return SyncOutcome.mai;
+  }
+
+  void _rememberOutcome(SyncOutcome outcome) {
+    StorageService.prefsBox.put(_outcomeKey, outcome.name);
   }
 
   String? get _pushedFingerprint => StorageService.prefsBox.get(_fingerprintKey) as String?;
@@ -120,7 +206,13 @@ class SyncNotifier extends Notifier<SyncState> {
     StorageService.prefsBox.put(_codeKey, code);
     // Another account's data: nothing we pushed before applies to it.
     StorageService.prefsBox.delete(_fingerprintKey);
-    state = state.copyWith(code: code, clearError: true);
+    // E nemmeno l'esito di prima: è un codice nuovo, non si sa ancora niente.
+    _rememberOutcome(SyncOutcome.mai);
+    state = state.copyWith(
+      code: code,
+      clearError: true,
+      outcome: SyncOutcome.mai,
+    );
     return true;
   }
 
@@ -139,10 +231,16 @@ class SyncNotifier extends Notifier<SyncState> {
 
   /// Stops syncing on this device. Local favourites/progress stay untouched,
   /// and the blob stays on the server for the other devices.
-  void disable() {
+  ///
+  /// [refused] quando a spegnerla è stato il server: l'esito va ricordato,
+  /// altrimenti la schermata direbbe "nessuno l'ha accesa" a chi invece l'ha
+  /// vista spegnere da sotto i piedi.
+  void disable({bool refused = false}) {
     StorageService.prefsBox.delete(_codeKey);
     StorageService.prefsBox.delete(_fingerprintKey);
-    state = state.copyWith(clearCode: true, clearError: true);
+    final outcome = refused ? SyncOutcome.rifiutata : SyncOutcome.mai;
+    _rememberOutcome(outcome);
+    state = state.copyWith(clearCode: true, clearError: true, outcome: outcome);
   }
 
   /// Full round trip. Used by "Sincronizza ora" and once at startup, where it
@@ -181,14 +279,27 @@ class SyncNotifier extends Notifier<SyncState> {
       final now = DateTime.now();
       StorageService.prefsBox.put(_lastAtKey, now.millisecondsSinceEpoch);
       StorageService.prefsBox.put(_fingerprintKey, mergedFp);
-      state = state.copyWith(running: false, lastSyncAt: now, clearError: true);
-    } on SyncNotAllowedException catch (e) {
-      // The code isn't enabled: say so, instead of sending the user to check
-      // an address and a code that are both fine.
-      state = state.copyWith(running: false, error: e.message);
-    } catch (_) {
+      _rememberOutcome(SyncOutcome.ok);
       state = state.copyWith(
         running: false,
+        lastSyncAt: now,
+        clearError: true,
+        outcome: SyncOutcome.ok,
+      );
+    } on SyncNotAllowedException catch (e) {
+      // Il server dice di no: non è un guasto, è l'interruttore dell'utenza.
+      // Il codice si butta via — il pannello comanda anche al contrario (§7),
+      // e tenerselo vorrebbe dire ripresentarsi a ogni avvio per farsi dire di
+      // no un'altra volta, mentre la schermata continua a dire "Attiva".
+      // Se il proprietario la riaccende, il dispositivo ri-adotta il codice al
+      // primo invio che riceve, senza che nessuno digiti niente.
+      disable(refused: true);
+      state = state.copyWith(running: false, error: e.message);
+    } catch (_) {
+      _rememberOutcome(SyncOutcome.fallita);
+      state = state.copyWith(
+        running: false,
+        outcome: SyncOutcome.fallita,
         error: 'Sincronizzazione non riuscita. Controlla codice e indirizzo.',
       );
     }

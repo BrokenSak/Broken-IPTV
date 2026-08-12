@@ -115,9 +115,9 @@ void main() {
     // la riga mentre lo stop del focus copriva solo il nome, e l'anello usciva
     // più stretto della cosa che doveva incorniciare.
     //
-    // Dal 78° giro la riga della playlist è tornata a essere una fermata del
-    // telecomando (sola lettura, ma navigabile) ed è il punto d'atterraggio:
-    // è lì che si misura, perché è l'unica con l'anello acceso all'arrivo.
+    // Dall'81° giro il punto d'atterraggio è la riga del **codice del
+    // dispositivo** (la scheda della playlist non c'è più): è lì che si misura,
+    // perché è l'unica con l'anello acceso all'arrivo.
     debugDeviceModeOverride = DeviceMode.tv;
 
     await tester.pumpWidget(ProviderScope(
@@ -137,9 +137,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
     }
 
-    final label = find.text('Nessuna playlist');
+    final label = find.textContaining('Codice di questo dispositivo');
     final stop = find.ancestor(of: label, matching: find.byType(TvFocusable));
-    expect(stop, findsOneWidget, reason: 'la riga playlist deve avere il suo stop');
+    expect(stop, findsOneWidget, reason: 'la riga del codice deve avere il suo stop');
 
     final surface = _decoratedRect(
       tester,

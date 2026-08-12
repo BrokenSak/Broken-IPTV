@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../data/models/xtream_profile.dart';
 import '../../../data/services/content_source.dart';
 import '../../../data/services/device_mode_service.dart';
 import '../../../data/services/provisioning_service.dart';
@@ -108,11 +107,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profiles = ref.watch(profilesProvider);
-    final selectedId = ref.watch(selectedProfileIdProvider);
-    final active = profiles.where((p) => p.id == selectedId).firstOrNull ??
-        (profiles.isEmpty ? null : profiles.first);
-
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -129,17 +123,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text('Playlist', style: _kSectionTitle),
-          const SizedBox(height: 8),
-          // ⚠️ Read-only, and there is exactly one (72° giro, richiesta
-          // dell'utente): la playlist è quella che il proprietario manda dal
-          // pannello. Niente aggiungi/modifica/elimina, e nessun elenco da cui
-          // scegliere — quindi qui dentro non c'è un solo elemento focusabile.
-          _RigaLeggibile(autofocus: true, child: _PlaylistSummary(profile: active)),
-          const SizedBox(height: 8),
+          // ⚠️ La scheda della playlist non c'è più (81° giro, richiesta
+          // dell'utente): mostrava il **nome scritto nel pannello**, che è
+          // un'etichetta del proprietario ("Enrico Hoffman - Firestick
+          // Salone") e sulla TV di chi guarda non ci deve stare. L'unica cosa
+          // che identifica l'abbonamento per chi lo usa è il **suo nome
+          // utente**, ed è finito dentro la scheda Account, dove sta il resto
+          // di quello che si può dire dell'abbonamento.
           const Text('Codice del dispositivo', style: _kSectionTitle),
           const SizedBox(height: 8),
-          _RigaLeggibile(child: _CodiceDispositivo(code: ref.watch(deviceCodeProvider))),
+          // Punto d'atterraggio del telecomando: è il primo premibile della
+          // lista ed è anche quello che serve "adesso, mentre qualcuno te lo
+          // chiede al telefono" (§7).
+          _RigaLeggibile(
+            autofocus: true,
+            child: _CodiceDispositivo(code: ref.watch(deviceCodeProvider)),
+          ),
           if (debugAndroidSectionOverride ?? Platform.isAndroid) ...[
             const SizedBox(height: 24),
             const Text('Modalità dispositivo', style: _kSectionTitle),
@@ -341,61 +340,6 @@ class _RigaLeggibile extends StatelessWidget {
   }
 }
 
-/// La playlist attiva, in sola lettura.
-///
-/// ⚠️ Niente `TvFocusable`, niente `ListTile`: non c'è niente da premere, e un
-/// ink Material qui sarebbe una fermata cieca del D-pad (vedi [_SettingLabel]).
-/// Mostra anche indirizzo e utente, che prima si vedevano solo entrando in
-/// Modifica: ora che Modifica non esiste più, è l'unico posto dove leggerli per
-/// dire a chi ti configura l'app cosa sta usando questo dispositivo.
-class _PlaylistSummary extends StatelessWidget {
-  const _PlaylistSummary({required this.profile});
-
-  final XtreamProfile? profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = profile;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            p == null ? Icons.playlist_remove : Icons.playlist_play,
-            color: p == null ? AppColors.textSecondary : AppColors.accent,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(p?.name ?? 'Nessuna playlist', style: _kItemTitle),
-                const SizedBox(height: 2),
-                Text(
-                  p == null
-                      ? 'La mette chi ti ha dato l\'applicazione: leggigli il codice qui sotto.'
-                      // ⚠️ Solo il nome dell'utenza, mai indirizzo e utente
-                      // (richiesta dell'utente): chi guarda la TV non deve
-                      // leggerli, e chi passa in salotto nemmeno.
-                      : 'Utenza attiva',
-                  style: _kItemDesc,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// The caption above a row of chips ("Rapporto d'aspetto predefinito", "Salto
 /// avanti/indietro"): an icon, a title and an optional description.
 ///
@@ -464,36 +408,79 @@ class _AccountSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountInfoProvider);
-    return account.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-      ),
-      error: (_, _) => const Text('Informazioni account non disponibili.', style: _kItemDesc),
-      data: (AccountInfo? a) {
-        if (a == null) {
-          return const Text('Informazioni account non disponibili.', style: _kItemDesc);
-        }
-        final rows = <Widget>[];
-        void row(IconData icon, String label, String value) {
-          rows.add(Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: AppColors.textSecondary),
-                const SizedBox(width: 10),
-                Text('$label: ', style: _kItemTitle),
-                Expanded(
-                  child: Text(
-                    value,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    // L'utenza attiva su questo dispositivo. Non il nome che il proprietario le
+    // ha dato nel pannello (81° giro: quello è roba sua) ma il **nome utente**
+    // dell'abbonamento, l'unico che chi guarda possa riconoscere come suo.
+    final profiles = ref.watch(profilesProvider);
+    final selectedId = ref.watch(selectedProfileIdProvider);
+    final active = profiles.where((p) => p.id == selectedId).firstOrNull ??
+        (profiles.isEmpty ? null : profiles.first);
+    final utente = active?.username.trim() ?? '';
+
+    Widget scheda(List<Widget> rows) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
+        );
+
+    Widget riga(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: AppColors.textSecondary),
+              const SizedBox(width: 10),
+              Text('$label: ', style: _kItemTitle),
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+        );
+
+    // La riga dell'utenza c'è sempre, anche mentre il pannello IPTV non
+    // risponde: viene dalla playlist salvata qui, non dalla rete.
+    final utenza = riga(
+      Icons.person_outline,
+      'Utenza attiva',
+      utente.isEmpty ? 'nessuna' : utente,
+    );
+
+    return account.when(
+      loading: () => scheda([
+        utenza,
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      ]),
+      error: (_, _) => scheda([
+        utenza,
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: Text('Resto delle informazioni non disponibile.', style: _kItemDesc),
+        ),
+      ]),
+      data: (AccountInfo? a) {
+        final rows = <Widget>[utenza];
+        void row(IconData icon, String label, String value) {
+          rows.add(riga(icon, label, value));
+        }
+
+        if (a == null) {
+          rows.add(const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text('Resto delle informazioni non disponibile.', style: _kItemDesc),
           ));
+          return scheda(rows);
         }
 
         if (a.status != null) {
@@ -510,22 +497,10 @@ class _AccountSection extends ConsumerWidget {
         }
         // ⚠️ Niente riga "Server" (79° giro, richiesta dell'utente): era
         // l'ultimo posto dell'app in cui l'indirizzo del pannello si leggeva a
-        // schermo, e chi guarda la TV non lo deve vedere — vale la stessa
-        // ragione per cui la scheda della playlist mostra solo il nome
-        // dell'utenza. `AccountInfo.serverUrl` resta: serve al codice, non
-        // agli occhi.
-        if (rows.isEmpty) {
-          return const Text('Informazioni account non disponibili.', style: _kItemDesc);
-        }
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.glassBorder),
-          ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
-        );
+        // schermo, e chi guarda la TV non lo deve vedere — stessa ragione per
+        // cui qui compare il nome utente e non il nome scritto nel pannello.
+        // `AccountInfo.serverUrl` resta: serve al codice, non agli occhi.
+        return scheda(rows);
       },
     );
   }
@@ -555,15 +530,24 @@ class _SyncSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sync = ref.watch(syncProvider);
+    final truth = sync.truth;
+    final attiva = truth == SyncTruth.attiva;
 
-    final String detail;
-    if (!sync.enabled) {
-      detail = 'Non attiva su questo dispositivo.';
-    } else if (sync.lastSyncAt != null) {
-      detail = 'Attiva · ultimo aggiornamento ${_fmtWhen(sync.lastSyncAt!)}.';
-    } else {
-      detail = 'Attiva · nessun aggiornamento ancora.';
-    }
+    // ⚠️ "Attiva" vuol dire **funziona**, non "ho un codice salvato" (81°
+    // giro, segnalato dall'utente: «dice attiva anche quando non è
+    // effettivamente attiva»). Il codice ce l'ha il dispositivo e non dipende
+    // da nessuno; che il server lo accetti sì, ed è quello che conta.
+    final String detail = switch (truth) {
+      SyncTruth.attiva => 'Ultimo aggiornamento ${_fmtWhen(sync.lastSyncAt!)}.',
+      SyncTruth.spentaDalPannello =>
+        'Il servizio non l\'accetta più per questo dispositivo.',
+      SyncTruth.maiRiuscita => 'Non è ancora riuscita a collegarsi.',
+      SyncTruth.nonRiuscita => sync.lastSyncAt == null
+          ? 'L\'ultimo tentativo non è riuscito.'
+          : 'L\'ultimo tentativo non è riuscito · aggiornata fino al '
+              '${_fmtWhen(sync.lastSyncAt!)}.',
+      SyncTruth.spenta => 'Nessuno l\'ha accesa su questo dispositivo.',
+    };
 
     return Container(
       width: double.infinity,
@@ -577,8 +561,8 @@ class _SyncSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            sync.enabled ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-            color: sync.enabled ? AppColors.accent : AppColors.textSecondary,
+            attiva ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+            color: attiva ? AppColors.accent : AppColors.textSecondary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -586,7 +570,7 @@ class _SyncSection extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(sync.enabled ? 'Attiva' : 'Non attiva', style: _kItemTitle),
+                Text(attiva ? 'Attiva' : 'Non attiva', style: _kItemTitle),
                 const SizedBox(height: 4),
                 const Text(
                   'Film e serie li riprendi dal punto esatto su ogni '
@@ -595,12 +579,16 @@ class _SyncSection extends ConsumerWidget {
                   'ovunque.',
                   style: _kItemDesc,
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Se la vuoi, contatta chi ti ha dato l\'applicazione: si '
-                  'accende solo dal suo pannello, perché ha un costo aggiuntivo.',
-                  style: _kItemDesc,
-                ),
+                // Solo quando non è attiva: dirlo mentre funziona sarebbe una
+                // riga di istruzioni per una cosa già fatta.
+                if (!attiva) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Si accende solo dal pannello di chi ti ha dato '
+                    'l\'applicazione, perché ha un costo aggiuntivo.',
+                    style: _kItemDesc,
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Text(detail, style: _kItemDesc),
               ],

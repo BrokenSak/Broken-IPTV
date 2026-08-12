@@ -325,10 +325,10 @@ void main() {
 
     // Arrival: dal 78° giro OGNI riquadro è una fermata del telecomando, anche
     // quelli che non fanno niente (senza, col D-pad non si possono rileggere).
-    // Si atterra quindi sulla riga della playlist, in cima: due Giù per
-    // arrivare alle chip del rapporto d'aspetto — playlist, codice, chip — e
-    // due Destra che si fermano sull'ultima, "Riempi".
-    await _pressDown(tester, 2);
+    // Dall'81° giro la prima fermata è il **codice del dispositivo** (la scheda
+    // della playlist non c'è più): un Giù arriva alle chip del rapporto
+    // d'aspetto, e due Destra si fermano sull'ultima, "Riempi".
+    await _pressDown(tester, 1);
     for (var i = 0; i < 2; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
@@ -346,11 +346,11 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: _shell(const SettingsScreen())));
     await tester.pumpAndSettle();
 
-    // Dalla riga della playlist: codice, chip dell'aspetto, interruttore dei
-    // sottotitoli, chip del salto. Quelle righe stanno sotto la piega, quindi
-    // ogni salto del focus fa scorrere la lista (ensureVisible) — esattamente
-    // come col telecomando vero. Le frecce a destra si fermano su "60 s".
-    await _pressDown(tester, 4);
+    // Dalla riga del codice: chip dell'aspetto, interruttore dei sottotitoli,
+    // chip del salto. Quelle righe stanno sotto la piega, quindi ogni salto del
+    // focus fa scorrere la lista (ensureVisible) — esattamente come col
+    // telecomando vero. Le frecce a destra si fermano su "60 s".
+    await _pressDown(tester, 3);
     for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
